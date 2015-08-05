@@ -64,6 +64,7 @@ static int cpu_hotplug_disabled;
 static struct {
 	struct task_struct *active_writer;
 	struct mutex lock; /* Synchronizes accesses to refcount, */
+
 	/*
 	 * Also blocks the new readers during
 	 * an ongoing cpu hotplug operation.
@@ -76,6 +77,7 @@ static struct {
 #endif
 } cpu_hotplug = {
 	.active_writer = NULL,
+
 	.lock = __MUTEX_INITIALIZER(cpu_hotplug.lock),
 	.refcount = 0,
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
@@ -86,8 +88,10 @@ static struct {
 /* Lockdep annotations for get/put_online_cpus() and cpu_hotplug_begin/end() */
 #define cpuhp_lock_acquire_read() lock_map_acquire_read(&cpu_hotplug.dep_map)
 
+
 #define cpuhp_lock_acquire()      lock_map_acquire(&cpu_hotplug.dep_map)
 #define cpuhp_lock_release()      lock_map_release(&cpu_hotplug.dep_map)
+
 
 void get_online_cpus(void)
 {
@@ -101,14 +105,18 @@ void get_online_cpus(void)
 
 
 
+
+
 }
 EXPORT_SYMBOL_GPL(get_online_cpus);
 
 void put_online_cpus(void)
 {
+
 	if (cpu_hotplug.active_writer == current)
 		return;
 	mutex_lock(&cpu_hotplug.lock);
+
 
 
 	if (WARN_ON(!cpu_hotplug.refcount))
@@ -146,7 +154,9 @@ EXPORT_SYMBOL_GPL(put_online_cpus);
  */
 void cpu_hotplug_begin(void)
 {
+
 	cpu_hotplug.active_writer = current;
+
 
 	cpuhp_lock_acquire();
 	for (;;) {
@@ -158,6 +168,7 @@ void cpu_hotplug_begin(void)
 		mutex_unlock(&cpu_hotplug.lock);
 		schedule();
 	}
+
 }
 
 void cpu_hotplug_done(void)
@@ -177,14 +188,14 @@ void cpu_hotplug_done(void)
 void cpu_hotplug_disable(void)
 {
 	cpu_maps_update_begin();
-	cpu_hotplug_disabled = 1;
+	cpu_hotplug_disabled++;
 	cpu_maps_update_done();
 }
 
 void cpu_hotplug_enable(void)
 {
 	cpu_maps_update_begin();
-	cpu_hotplug_disabled = 0;
+	WARN_ON(--cpu_hotplug_disabled < 0);
 	cpu_maps_update_done();
 }
 
@@ -242,6 +253,7 @@ static int cpu_notify(unsigned long val, void *v)
 }
 
 static int cpus_notify(unsigned long val, void *v)
+
 {
 	return __cpus_notify(val, v, -1, NULL);
 }
@@ -497,6 +509,7 @@ int __ref cpus_down(struct cpumask *cpus)
 		}
 	}
 
+
 	for_each_cpu(cpu, &dest_cpus) {
 		void *hcpu = (void *)(long)cpu;
 		cpu_notify_nofail(CPU_DOWN_LATE_PREPARE, hcpu);
@@ -523,6 +536,7 @@ int __ref cpus_down(struct cpumask *cpus)
 		 */
 		while (!idle_cpu(cpu)) {
 			cpu_relax();
+
 
 			mdelay(1);
 			timeout--;
@@ -765,13 +779,19 @@ int disable_nonboot_cpus(void)
 	}
 #endif
 
-	if (!error) {
+	if (!error)
 		BUG_ON(num_online_cpus() > 1);
-		/* Make sure the CPUs won't be enabled by someone else */
-		cpu_hotplug_disabled = 1;
-	} else {
+	else
+
 		pr_err("Non-boot CPUs are not disabled\n");
-	}
+
+	/*
+	 * Make sure the CPUs won't be enabled by someone else. We need to do
+	 * this even in case of failure as all disable_nonboot_cpus() users are
+	 * supposed to do enable_nonboot_cpus() on the failure path.
+	 */
+	cpu_hotplug_disabled++;
+
 	cpu_maps_update_done();
 	return error;
 }
@@ -791,7 +811,7 @@ void __ref enable_nonboot_cpus(void)
 
 	/* Allow everyone to use the CPU hotplug again */
 	cpu_maps_update_begin();
-	cpu_hotplug_disabled = 0;
+	WARN_ON(--cpu_hotplug_disabled < 0);
 	if (cpumask_empty(frozen_cpus))
 		goto out;
 
