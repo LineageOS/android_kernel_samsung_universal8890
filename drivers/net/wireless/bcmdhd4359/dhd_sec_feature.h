@@ -113,8 +113,6 @@
 #define DPC_CPUCORE 4
 #define RXF_CPUCORE 5
 #define TASKLET_CPUCORE 5
-#define ARGOS_CPU_SCHEDULER
-#define ARGOS_RPS_CPU_CTL
 /*
  * Note that EXYNOS5433, EXYNOS7420 and EXYNOS8890 are big/little
  * platform so the CPU Masks are defined accordingly. That is
@@ -123,8 +121,6 @@
 #if defined(DHD_LB)
 #define DHD_LB_PRIMARY_CPUS	(0xF0)
 #define DHD_LB_SECONDARY_CPUS	(0x0E)
-#else
-#define ARGOS_DPC_TASKLET_CTL
 #endif /* !defined(DHD_LB) */
 
 #ifdef CONFIG_MACH_UNIVERSAL7420
