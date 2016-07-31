@@ -893,7 +893,7 @@ static int max77854_chg_get_property(struct power_supply *psy,
 		max77854_test_read(charger);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		val->intval = charger->input_current;
+		val->intval = charger->input_current * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
 		if (val->intval == POWER_SUPPLY_TYPE_WIRELESS ||
@@ -904,9 +904,9 @@ static int max77854_chg_get_property(struct power_supply *psy,
 			val->intval == POWER_SUPPLY_TYPE_WIRELESS_STAND ||
 			val->intval == POWER_SUPPLY_TYPE_WIRELESS_HV_STAND ||
 			val->intval == POWER_SUPPLY_TYPE_HV_WIRELESS_ETX)
-			val->intval = max77854_get_input_current_type(charger, POWER_SUPPLY_TYPE_WIRELESS);
+			val->intval = max77854_get_input_current_type(charger, POWER_SUPPLY_TYPE_WIRELESS) * 1000;
 		else
-			val->intval = max77854_get_input_current_type(charger, POWER_SUPPLY_TYPE_MAINS);
+			val->intval = max77854_get_input_current_type(charger, POWER_SUPPLY_TYPE_MAINS) * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_NOW:
 		val->intval = charger->charging_current;
