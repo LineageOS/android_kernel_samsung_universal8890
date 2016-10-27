@@ -27,6 +27,7 @@
 #include <linux/spinlock.h>
 #include <linux/notifier.h>
 #include <linux/suspend.h>
+
 #include <linux/debugfs.h>
 
 #define MAX_WAKEUP_REASON_IRQS 32
@@ -35,8 +36,10 @@ static int irqcount;
 static bool suspend_abort;
 static bool mbox_wakeup;
 static char abort_reason[MAX_SUSPEND_ABORT_LEN];
+
 static struct kobject *wakeup_reason;
 static DEFINE_SPINLOCK(resume_reason_lock);
+
 
 static ktime_t last_monotime; /* monotonic time before last suspend */
 static ktime_t curr_monotime; /* monotonic time after last suspend */
@@ -48,6 +51,7 @@ static unsigned int time_in_suspend_bins[32];
 
 static ssize_t last_resume_reason_show(struct kobject *kobj, struct kobj_attribute *attr,
 		char *buf)
+
 {
 	int irq_no, buf_offset = 0;
 	struct irq_desc *desc;
@@ -60,9 +64,11 @@ static ssize_t last_resume_reason_show(struct kobject *kobj, struct kobj_attribu
 			if (desc && desc->action && desc->action->name)
 				buf_offset += sprintf(buf + buf_offset, "%d %s\n",
 						irq_list[irq_no], desc->action->name);
+
 			else
 				buf_offset += sprintf(buf + buf_offset, "%d\n",
 						irq_list[irq_no]);
+
 		}
 		/* show INT_MBOX instead of Unknown to distinguish CP wakeup */
 		if (mbox_wakeup)
@@ -70,6 +76,7 @@ static ssize_t last_resume_reason_show(struct kobject *kobj, struct kobj_attribu
 	}
 	spin_unlock(&resume_reason_lock);
 	return buf_offset;
+
 }
 
 static ssize_t last_suspend_time_show(struct kobject *kobj,
@@ -112,11 +119,14 @@ static struct attribute_group attr_group = {
 	.attrs = attrs,
 };
 
+
 /*
  * logs all the wake up reasons to the kernel
  * stores the irqs to expose them to the userspace via sysfs
+
  */
 void log_wakeup_reason(int irq)
+
 {
 	struct irq_desc *desc;
 	desc = irq_to_desc(irq);
@@ -126,12 +136,14 @@ void log_wakeup_reason(int irq)
 	else
 		printk(KERN_INFO "Resume caused by IRQ %d\n", irq);
 
+
 	spin_lock(&resume_reason_lock);
 	if (irqcount == MAX_WAKEUP_REASON_IRQS) {
 		spin_unlock(&resume_reason_lock);
 		printk(KERN_WARNING "Resume caused by more than %d IRQs\n",
 				MAX_WAKEUP_REASON_IRQS);
 		return;
+
 	}
 
 	irq_list[irqcount++] = irq;
@@ -139,6 +151,7 @@ void log_wakeup_reason(int irq)
 }
 
 void log_mbox_wakeup(void)
+
 {
 	spin_lock(&resume_reason_lock);
 
@@ -146,38 +159,45 @@ void log_mbox_wakeup(void)
 	if (mbox_wakeup) {
 		spin_unlock(&resume_reason_lock);
 		return;
+
 	}
+
 
 	mbox_wakeup = true;
 	spin_unlock(&resume_reason_lock);
 
+
 	printk(KERN_INFO "Resume caused by INT_MBOX\n");
 }
+
 
 int check_wakeup_reason(int irq)
 {
 	int irq_no;
 	int ret = false;
 
-	spin_lock(&resume_reason_lock);
+	unsigned long flags;
+	spin_lock_irqsave(&resume_reason_lock, flags);
 	for (irq_no = 0; irq_no < irqcount; irq_no++)
 		if (irq_list[irq_no] == irq) {
 			ret = true;
 			break;
 	}
-	spin_unlock(&resume_reason_lock);
+	spin_unlock_irqrestore(&resume_reason_lock, flags);
 	return ret;
 }
+
 
 void log_suspend_abort_reason(const char *fmt, ...)
 {
 	va_list args;
+	unsigned long flags;
 
-	spin_lock(&resume_reason_lock);
+	spin_lock_irqsave(&resume_reason_lock, flags);
 
 	//Suspend abort reason has already been logged.
 	if (suspend_abort) {
-		spin_unlock(&resume_reason_lock);
+		spin_unlock_irqrestore(&resume_reason_lock, flags);
 		return;
 	}
 
@@ -185,13 +205,16 @@ void log_suspend_abort_reason(const char *fmt, ...)
 	va_start(args, fmt);
 	vsnprintf(abort_reason, MAX_SUSPEND_ABORT_LEN, fmt, args);
 	va_end(args);
-	spin_unlock(&resume_reason_lock);
+
+	spin_unlock_irqrestore(&resume_reason_lock, flags);
 }
 
 /* Detects a suspend and clears all the previous wake up reasons*/
 static int wakeup_reason_pm_event(struct notifier_block *notifier,
 		unsigned long pm_event, void *unused)
 {
+	unsigned long flags;
+
 #if IS_ENABLED(CONFIG_SUSPEND_TIME)
 	ktime_t temp;
 	struct timespec suspend_time;
@@ -199,15 +222,16 @@ static int wakeup_reason_pm_event(struct notifier_block *notifier,
 
 	switch (pm_event) {
 	case PM_SUSPEND_PREPARE:
-		spin_lock(&resume_reason_lock);
+		spin_lock_irqsave(&resume_reason_lock, flags);
 		irqcount = 0;
 		suspend_abort = false;
 		mbox_wakeup = false;
-		spin_unlock(&resume_reason_lock);
+		spin_unlock_irqrestore(&resume_reason_lock, flags);
 		/* monotonic time since boot */
 		last_monotime = ktime_get();
 		/* monotonic time since boot including the time spent in suspend */
 		last_stime = ktime_get_boottime();
+
 		break;
 	case PM_POST_SUSPEND:
 		/* monotonic time since boot */
@@ -294,6 +318,7 @@ int __init wakeup_reason_init(void)
 		printk(KERN_WARNING "[%s] failed to register PM notifier %d\n",
 				__func__, retval);
 
+
 	wakeup_reason = kobject_create_and_add("wakeup_reasons", kernel_kobj);
 	if (!wakeup_reason) {
 		printk(KERN_WARNING "[%s] failed to create a sysfs kobject\n",
@@ -357,6 +382,7 @@ static int wakeup_reason_stats_show(struct seq_file *s, void *unused)
 static int wakeup_reason_stats_open(struct inode *inode, struct file *file)
 {
 	return single_open(file, wakeup_reason_stats_show, NULL);
+
 }
 
 static const struct file_operations wakeup_reason_stats_ops = {
