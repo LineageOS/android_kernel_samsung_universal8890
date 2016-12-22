@@ -525,6 +525,13 @@ config UID_CPUTIME
 	help
 	  Per UID based cpu time statistics exported to /proc/uid_cputime
 
+config TIMA_LOG
+	tristate "Support for dumping TIMA log"
+	depends on TIMA
+	default y
+	help
+		This option enables support for dumping TIMA log.
+
 source "drivers/misc/c2port/Kconfig"
 source "drivers/misc/eeprom/Kconfig"
 source "drivers/misc/cb710/Kconfig"
@@ -538,4 +545,6 @@ source "drivers/misc/mic/Kconfig"
 source "drivers/misc/genwqe/Kconfig"
 source "drivers/misc/echo/Kconfig"
 source "drivers/misc/cxl/Kconfig"
+source "drivers/misc/mcu_ipc/Kconfig"
+source "drivers/misc/modem_v1/Kconfig"
 endmenu

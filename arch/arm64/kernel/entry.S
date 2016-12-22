@@ -70,6 +70,20 @@
 	.if	\regsize == 32
 	mov	w0, w0				// zero upper 32 bits of x0
 	.endif
+
+#ifdef CONFIG_SOC_EXYNOS8890
+	.if     \regsize == 32
+	.if     \el == 0
+	msr     cntp_cval_el0, x0
+	mov     x0, sp
+	lsr     x0, x0, #12
+	tlbi    vaae1, x0
+	dsb     nsh
+	mrs     x0, cntp_cval_el0
+	.endif
+	.endif
+#endif
+
 	push	x28, x29
 	push	x26, x27
 	push	x24, x25
@@ -122,6 +136,23 @@
 	ldr	x23, [sp, #S_SP]		// load return stack pointer
 
 #ifdef CONFIG_ARM64_ERRATUM_845719
+#ifdef CONFIG_SOC_EXYNOS8890
+	/*
+	 * Skip "Cortex-A53: 845719" on MNGS.
+	 */
+	mrs	x29, midr_el1
+	lsr	x29, x29, #0x04
+	and	x29, x29, #0xfff
+	cmp	x29, #0xd03
+	b.eq	2f
+
+	tlbi	vaae1, xzr
+	dsb	sy
+	isb
+
+	b	3f
+2:
+#endif
 	alternative_insn						\
 	"nop",								\
 	"tbz x22, #4, 1f",						\
@@ -137,6 +168,7 @@
 	"msr contextidr_el1, xzr; 1:",					\
 	ARM64_WORKAROUND_845719
 #endif
+3:
 #endif
 	.endif
 	.if	\ret
@@ -308,7 +340,16 @@ el1_da:
 	 * Data abort handling
 	 */
 	mrs	x0, far_el1
+
 	enable_dbg
+
+	/*
+	 * tlb conflict handling
+	*/
+	and 	x24, x1, #ESR_EL1_ISS_DFSC_MASK
+	cmp     x24, #ESR_EL1_ISS_DFSC_TLB_CONFLICT
+	b.eq	el1_da_tlb_conflict
+
 	// re-enable interrupts if they were enabled in the aborted context
 	tbnz	x23, #7, 1f			// PSR_I_BIT
 	enable_irq
@@ -318,6 +359,10 @@ el1_da:
 
 	// disable interrupts before pulling preserved data off the stack
 	disable_irq
+	kernel_exit 1
+el1_da_tlb_conflict:
+	tlbi vmalle1
+	dsb nsh
 	kernel_exit 1
 el1_sp_pc:
 	/*

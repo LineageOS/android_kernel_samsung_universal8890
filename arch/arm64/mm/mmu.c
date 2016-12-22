@@ -34,8 +34,17 @@
 #include <asm/tlb.h>
 #include <asm/memblock.h>
 #include <asm/mmu_context.h>
+#include <asm/map.h>
 
 #include "mm.h"
+
+#include <linux/vmalloc.h>
+
+#if defined(CONFIG_ECT)
+#include <soc/samsung/ect_parser.h>
+#endif
+
+static int iotable_on;
 
 /*
  * Empty_zero_page is a special page that is used for zero-initialized data
@@ -150,7 +159,10 @@ static void __init alloc_init_pte(pmd_t *pmd, unsigned long addr,
 
 	pte = pte_offset_kernel(pmd, addr);
 	do {
-		set_pte(pte, pfn_pte(pfn, prot));
+		if (iotable_on == 1)
+			set_pte(pte, pfn_pte(pfn, pgprot_iotable_init(PAGE_KERNEL_EXEC)));
+		else
+			set_pte(pte, pfn_pte(pfn, prot));
 		pfn++;
 	} while (pte++, addr += PAGE_SIZE, addr != end);
 }
@@ -187,6 +199,10 @@ static void __init alloc_init_pmd(pud_t *pud, unsigned long addr,
 		if (((addr | next | phys) & ~SECTION_MASK) == 0) {
 			pmd_t old_pmd =*pmd;
 			set_pmd(pmd, __pmd(phys | prot_sect));
+			if (iotable_on == 1)
+				set_pmd(pmd, __pmd(phys | PROT_SECT_NORMAL_NC));
+			else
+				set_pmd(pmd, __pmd(phys | prot_sect));
 			/*
 			 * Check for previous table entries created during
 			 * boot (__create_page_tables) and flush them.
@@ -291,6 +307,8 @@ static void __init map_mem(void)
 {
 	struct memblock_region *reg;
 	phys_addr_t limit;
+	phys_addr_t start;
+	phys_addr_t end;
 
 	/*
 	 * Temporarily limit the memblock range. We need to do this as
@@ -310,8 +328,8 @@ static void __init map_mem(void)
 
 	/* map all the memory banks */
 	for_each_memblock(memory, reg) {
-		phys_addr_t start = reg->base;
-		phys_addr_t end = start + reg->size;
+		start = reg->base;
+		end = start + reg->size;
 
 		if (start >= end)
 			break;
@@ -348,6 +366,10 @@ void __init paging_init(void)
 	void *zero_page;
 
 	map_mem();
+
+#if defined(CONFIG_ECT)
+	ect_init_map_io();
+#endif
 
 	/*
 	 * Finally flush the caches and tlb to ensure that we're in a
@@ -463,3 +485,86 @@ void vmemmap_free(unsigned long start, unsigned long end)
 {
 }
 #endif	/* CONFIG_SPARSEMEM_VMEMMAP */
+
+/* For compatible with Exynos */
+
+LIST_HEAD(static_vmlist);
+
+void __init add_static_vm_early(struct static_vm *svm)
+{
+	struct static_vm *curr_svm;
+	struct vm_struct *vm;
+	void *vaddr;
+
+	vm = &svm->vm;
+	vm_area_add_early(vm);
+	vaddr = vm->addr;
+
+	list_for_each_entry(curr_svm, &static_vmlist, list) {
+		vm = &curr_svm->vm;
+
+		if (vm->addr > vaddr)
+			break;
+	}
+	list_add_tail(&svm->list, &curr_svm->list);
+}
+
+static void __init *early_alloc_aligned(unsigned long sz, unsigned long align)
+{
+	void *ptr = __va(memblock_alloc(sz, align));
+	memset(ptr, 0, sz);
+	return ptr;
+}
+
+/*
+ * Create the architecture specific mappings
+ */
+static void __init __iotable_init(struct map_desc *io_desc, int nr, int exec)
+{
+	struct map_desc *md;
+	struct vm_struct *vm;
+	struct static_vm *svm;
+	phys_addr_t phys;
+	pgprot_t prot;
+	void *vm_caller;
+
+	if (!nr)
+		return;
+
+	svm = early_alloc_aligned(sizeof(*svm) * nr, __alignof__(*svm));
+
+	if (!exec) {
+		iotable_on = 1;
+		prot = pgprot_iotable_init(PAGE_KERNEL_EXEC);
+		vm_caller = iotable_init;
+	} else {
+		iotable_on = 0;
+		prot = PAGE_KERNEL_EXEC;
+		vm_caller = iotable_init_exec;
+	}
+
+	for (md = io_desc; nr; md++, nr--) {
+		phys = __pfn_to_phys(md->pfn);
+		create_mapping(phys, md->virtual, md->length);
+		vm = &svm->vm;
+		vm->addr = (void *)(md->virtual & PAGE_MASK);
+		vm->size = PAGE_ALIGN(md->length + (md->virtual & ~PAGE_MASK));
+		vm->phys_addr = __pfn_to_phys(md->pfn);
+		vm->flags = VM_IOREMAP | VM_ARM_STATIC_MAPPING;
+		vm->flags |= VM_ARM_MTYPE(md->type);
+		vm->caller = iotable_init;
+		add_static_vm_early(svm++);
+	}
+
+	iotable_on = 0;
+}
+
+void __init iotable_init(struct map_desc *io_desc, int nr)
+{
+	__iotable_init(io_desc, nr, 0);
+}
+
+void __init iotable_init_exec(struct map_desc *io_desc, int nr)
+{
+	__iotable_init(io_desc, nr, 1);
+}

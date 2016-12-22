@@ -11,8 +11,14 @@
 
 #include "image.h"
 
+/* .exit.text needed in case of alternative patching */
+#if (defined(CONFIG_GENERIC_BUG))
+#define ARM_EXIT_KEEP(x)        x
+#define ARM_EXIT_DISCARD(x)
+#else
 #define ARM_EXIT_KEEP(x)
 #define ARM_EXIT_DISCARD(x)	x
+#endif
 
 OUTPUT_ARCH(aarch64)
 ENTRY(_text)
@@ -96,6 +102,20 @@ SECTIONS
 	}
 
 	PERCPU_SECTION(64)
+
+#ifdef CONFIG_RELOCATABLE_KERNEL
+	.rela : {
+		. = ALIGN(8);
+		__reloc_start = .;
+		*(.rela .rela*)
+		__reloc_end = .;
+	}
+	.dynsym : {
+		. = ALIGN(8);
+		__dynsym_start = .;
+		*(.dynsym)
+	}
+#endif 
 
 	. = ALIGN(PAGE_SIZE);
 	__init_end = .;
