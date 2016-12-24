@@ -415,6 +415,7 @@ void __init setup_arch(char **cmdline_p)
 
 	*cmdline_p = boot_command_line;
 
+	early_fixmap_init();
 	early_ioremap_init();
 
 	parse_early_param();
@@ -431,7 +432,7 @@ void __init setup_arch(char **cmdline_p)
 	paging_init();
 	request_standard_resources();
 
-	efi_idmap_init();
+	efi_virtmap_init();
 	early_ioremap_reset();
 
 	unflatten_device_tree();
