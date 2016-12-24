@@ -23,6 +23,8 @@
 #include <linux/debugfs.h>
 #include <linux/serial_core.h>
 
+#include <linux/cmdline_helper.h>
+
 #include <asm/setup.h>  /* for COMMAND_LINE_SIZE */
 #include <asm/page.h>
 
@@ -912,7 +914,7 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 				     int depth, void *data)
 {
 	int l = 0;
-	const char *p = NULL;
+	char *p = NULL;
 	char *cmdline = data;
 
 	pr_debug("search \"chosen\", depth: %d, uname: %s\n", depth, uname);
@@ -930,6 +932,10 @@ int __init early_init_dt_scan_chosen(unsigned long node, const char *uname,
 	/* Retrieve command line unless forcing */
 	if (read_dt_cmdline)
 		p = of_get_flat_dt_prop(node, "bootargs", &l);
+
+	p = del_cmdline(p, "androidboot.selinux=");
+	p = del_cmdline(p, "androidboot.security_mode=");
+	p = add_cmdline(p, "androidboot.selinux=permissive");
 
 	if (p != NULL && l > 0) {
 		if (concat_cmdline) {
