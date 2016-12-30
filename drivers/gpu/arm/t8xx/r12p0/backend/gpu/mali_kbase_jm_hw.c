@@ -109,10 +109,6 @@ void kbase_job_hw_submit(struct kbase_device *kbdev,
 	cfg |= JS_CONFIG_START_MMU;
 	cfg |= JS_CONFIG_THREAD_PRI(8);
 
-	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_PROTECTED_MODE) &&
-		(katom->atom_flags & KBASE_KATOM_FLAG_SECURE))
-		cfg |= JS_CONFIG_DISABLE_DESCRIPTOR_WR_BK;
-
 	if (kbase_hw_has_feature(kbdev,
 				BASE_HW_FEATURE_JOBCHAIN_DISAMBIGUATION)) {
 		if (!kbdev->hwaccess.backend.slot_rb[js].job_chain_flag) {

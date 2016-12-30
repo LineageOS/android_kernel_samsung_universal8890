@@ -85,6 +85,5 @@ extern struct kbase_platform_funcs_conf platform_funcs;
  *
  * Attached value: pointer to @ref kbase_secure_ops
  */
-#define SECURE_CALLBACKS (&exynos_secure_ops)
-extern struct kbase_secure_ops exynos_secure_ops;
+#define SECURE_CALLBACKS (NULL)
 

@@ -3233,43 +3233,14 @@ static int kbasep_secure_mode_disable(struct kbase_device *kbdev)
 }
 
 static struct kbase_secure_ops kbasep_secure_ops = {
-	.secure_mode_enable = kbasep_secure_mode_enable,
+	.secure_mode_enable = kbasep_secure_mode_disable,
 	.secure_mode_disable = kbasep_secure_mode_disable,
 };
 
 static void kbasep_secure_mode_init(struct kbase_device *kbdev)
 {
-	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_PROTECTED_MODE)) {
-		/* Use native secure ops */
-		kbdev->secure_ops = &kbasep_secure_ops;
-		kbdev->secure_mode_support = true;
-	}
-#ifdef SECURE_CALLBACKS
-	else {
-		kbdev->secure_ops = SECURE_CALLBACKS;
-		kbdev->secure_mode_support = false;
-
-		if (kbdev->secure_ops) {
-			int err;
-
-			/* MALI_SEC_SECURE_RENDERING */
-			/* removed below code : Make sure secure mode msut be called by job manager before seucre rendering */
-			err = kbdev->secure_ops->secure_mode_init(kbdev);
-
-			/* MALI_SEC_SECURE_RENDERING */
-			/* secure_mode_disable() returns -EINVAL if not
-			 * supported
-			 */
-			kbdev->secure_mode_support = (err != -EINVAL);
-		}
-	}
-/* MALI_SEC_SECURE_RENDERING */
-#else
-	else {
-		kbdev->secure_mode_support = false;
-		GPU_LOG(DVFS_ERROR, LSI_GPU_SECURE, 0u, 0u, "%s: can NOT support Secure Rendering, No SECURE_CALLBACKS\n", __func__);
-	}
-#endif
+	kbdev->secure_mode_support = false;
+	GPU_LOG(DVFS_ERROR, LSI_GPU_SECURE, 0u, 0u, "%s: can NOT support Secure Rendering, No SECURE_CALLBACKS\n", __func__);
 }
 
 #ifdef CONFIG_MALI_NO_MALI
