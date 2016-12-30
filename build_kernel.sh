@@ -83,6 +83,7 @@ FUNC_BUILD_DTIMAGE_TARGET()
 	echo ""
 	echo "DT image target : $INSTALLED_DTIMAGE_TARGET"
 
+	mkdir -p "$BUILD_KERNEL_OUT_DIR/arch/$ARCH/boot/dtb"
 	cd "$BUILD_KERNEL_OUT_DIR/arch/$ARCH/boot/dtb"
 	for dts in $DTSFILES; do
 		echo "=> Processing: ${dts}.dts"
@@ -118,10 +119,6 @@ FUNC_BUILD_KERNEL()
 
 	mkdir $BUILD_KERNEL_DIR/output
 	rm $KERNEL_IMG
-	rm $BUILD_KERNEL_OUT_DIR/firmware/apm_8890_evt1.h
-	ln -s $BUILD_KERNEL_DIR/firmware/apm_8890_evt1.h $BUILD_KERNEL_OUT_DIR/firmware/apm_8890_evt1.h
-	rm $BUILD_KERNEL_OUT_DIR/init/vmm.elf
-	ln -s $BUILD_KERNEL_DIR/init/vmm.elf $BUILD_KERNEL_OUT_DIR/init/vmm.elf
 
 	make -C $BUILD_KERNEL_DIR O=$BUILD_KERNEL_OUT_DIR -j$BUILD_JOB_NUMBER ARCH=arm64 \
 			CROSS_COMPILE=$BUILD_CROSS_COMPILE \
