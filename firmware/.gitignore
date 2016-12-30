@@ -4,3 +4,4 @@
 *.csp
 *.dsp
 ihex2fw
+apm_8890_evt1.h
