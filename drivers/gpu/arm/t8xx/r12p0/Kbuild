@@ -15,7 +15,7 @@
 
 
 # Driver version string which is returned to userspace via an ioctl
-MALI_RELEASE_NAME ?= "r12p1-00dev0"
+MALI_RELEASE_NAME ?= "r12p1-05rel0"
 
 # Paths required for build
 KBASE_PATH = $(src)
@@ -35,8 +35,8 @@ MALI_MOCK_TEST ?= 0
 MALI_COVERAGE ?= 0
 MALI_INSTRUMENTATION_LEVEL ?= 0
 # MALI_SEC_SECURE_RENDERING
-MALI_SUPPORT_ASP_SECURE ?= 1
-MALI_SUPPORT_ASP_SECURE_BUF_CTRL ?= 1
+MALI_SUPPORT_ASP_SECURE ?= 0
+MALI_SUPPORT_ASP_SECURE_BUF_CTRL ?= 0
 
 # MALI_SEC_INTEGRATION
 # To resolve the choice error in Kconfig, define the config here.

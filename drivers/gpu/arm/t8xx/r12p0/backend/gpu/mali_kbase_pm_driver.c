@@ -1418,14 +1418,6 @@ out:
 
 	kbase_cache_set_coherency_mode(kbdev, kbdev->system_coherency);
 
-	if (kbase_hw_has_feature(kbdev, BASE_HW_FEATURE_PROTECTED_MODE)) {
-		u32 gpu_status = kbase_reg_read(kbdev,
-				GPU_CONTROL_REG(GPU_STATUS), NULL);
-
-		kbdev->secure_mode = (gpu_status &
-				GPU_STATUS_PROTECTED_MODE_ACTIVE) != 0;
-	}
-
 	/* If cycle counter was in use re-enable it, enable_irqs will only be
 	 * false when called from kbase_pm_powerup */
 	if (kbdev->pm.backend.gpu_cycle_counter_requests &&

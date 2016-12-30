@@ -1312,9 +1312,11 @@ int kbase_prepare_soft_job(struct kbase_jd_atom *katom)
 		break;
 #endif				/* CONFIG_SYNC */
 	case BASE_JD_REQ_SOFT_JIT_ALLOC:
+		return -EINVAL; /* Temporarily disabled */
 		return kbase_jit_allocate_prepare(katom);
-	case BASE_JD_REQ_SOFT_REPLAY:
 	case BASE_JD_REQ_SOFT_JIT_FREE:
+		return -EINVAL; /* Temporarily disabled */
+	case BASE_JD_REQ_SOFT_REPLAY:
 		break;
 	case BASE_JD_REQ_SOFT_EVENT_WAIT:
 	case BASE_JD_REQ_SOFT_EVENT_SET:
