@@ -303,7 +303,7 @@ ssize_t s2mpb02_show(struct device *dev,
 static DEVICE_ATTR(rear_flash, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
 	s2mpb02_show, s2mpb02_store);
 
-static DEVICE_ATTR(torch_flash, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
+static DEVICE_ATTR(rear_torch_flash, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
 	s2mpb02_show, s2mpb02_store);
 
 #if defined(CONFIG_OF)
@@ -504,9 +504,9 @@ static int s2mpb02_led_probe(struct platform_device *pdev)
 		}
 
 		if (device_create_file(s2mpb02_led_dev,
-					 &dev_attr_torch_flash) < 0) {
+					 &dev_attr_rear_torch_flash) < 0) {
 			pr_err("<%s> failed to create device file, %s\n",
-				__func__ , dev_attr_torch_flash.attr.name);
+				__func__ , dev_attr_rear_torch_flash.attr.name);
 		}
 	}
 
@@ -536,7 +536,10 @@ static int s2mpb02_led_remove(struct platform_device *pdev)
 
 	if(s2mpb02_led_dev) {
 		device_remove_file(s2mpb02_led_dev, &dev_attr_rear_flash);
-		device_remove_file(s2mpb02_led_dev, &dev_attr_torch_flash);
+		device_remove_file(s2mpb02_led_dev, &dev_attr_rear_torch_flash);
+#ifdef CONFIG_LEDS_IRIS_IRLED_CERTIFICATE_SUPPORT
+		device_remove_file(s2mpb02_led_dev, &dev_attr_irled_torch);
+#endif
 	}
 
 	if (camera_class && s2mpb02_led_dev) {
