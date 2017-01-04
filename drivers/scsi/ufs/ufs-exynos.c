@@ -13,6 +13,7 @@
 #include <linux/of.h>
 #include <linux/of_address.h>
 #include <linux/clk.h>
+#include <linux/smc.h>
 
 #include <soc/samsung/exynos-pm.h>
 #include <soc/samsung/exynos-powermode.h>
@@ -656,6 +657,8 @@ static void exynos_ufs_get_sfr(struct ufs_hba *hba)
 				cfg->val = ufshcd_readl(hba, cfg->offset);
 			else if (sel_api == LOG_VS_HCI_SFR)
 				cfg->val = hci_readl(ufs, cfg->offset);
+			else if (sel_api == LOG_FMP_SFR)
+				cfg->val = exynos_smc(SMC_CMD_SMU, FMP_SMU_DUMP, cfg->offset, 0);
 			else if (sel_api == LOG_UNIPRO_SFR)
 				cfg->val = unipro_readl(ufs, cfg->offset);
 			else if (sel_api == LOG_PMA_SFR)
@@ -1212,6 +1215,16 @@ static void exynos_ufs_establish_connt(struct exynos_ufs *ufs)
 
 static void exynos_ufs_config_smu(struct exynos_ufs *ufs)
 {
+	int ret;
+
+	ret = exynos_smc(SMC_CMD_FMP, FMP_SECURITY, UFS_FMP, FMP_DESC_OFF);
+	if (ret)
+		dev_err(ufs->dev, "Fail to smc call for FMP SECURITY\n");
+
+	ret = exynos_smc(SMC_CMD_SMU, FMP_SMU_INIT, FMP_SMU_OFF, 0);
+	if (ret)
+		dev_err(ufs->dev, "Fail to smc call for FMP SMU Initialization\n");
+
 	return;
 }
 
@@ -1925,6 +1938,7 @@ static int __exynos_ufs_suspend(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 
 static int __exynos_ufs_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 {
+	int ret;
 	struct exynos_ufs *ufs = to_exynos_ufs(hba);
 
 	exynos_ufs_ctrl_phy_pwr(ufs, true);
@@ -1934,8 +1948,13 @@ static int __exynos_ufs_resume(struct ufs_hba *hba, enum ufs_pm_op pm_op)
 	exynos_ufs_ctrl_hci_core_clk(ufs, false);
 	exynos_ufs_config_smu(ufs);
 
+	ret = exynos_smc(SMC_CMD_RESUME, 0, UFS_FMP, FMP_DESC_OFF);
+
 	if (ufshcd_is_clkgating_allowed(hba))
 		clk_disable_unprepare(ufs->clk_hci);
+
+	if (ret)
+		dev_warn(ufs->dev, "failed to smc call for FMP: %x\n", ret);
 
 	return 0;
 }
