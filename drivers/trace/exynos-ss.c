@@ -439,7 +439,9 @@ extern void register_hook_logbuf(void (*)(const char));
 #else
 extern void register_hook_logbuf(void (*)(const char *, size_t));
 #endif
+#ifdef CONFIG_EXYNOS_SNAPSHOT_HOOK_LOGGER
 extern void register_hook_logger(void (*)(const char *, const char *, size_t));
+#endif
 
 extern int exynos_check_hardlockup_reason(void);
 
