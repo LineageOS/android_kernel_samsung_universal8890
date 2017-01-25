@@ -350,9 +350,6 @@ extern const struct soc_enum arizona_ip_mode[];
 extern int arizona_ip_mode_put(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol);
 
-extern int moon_in_rate_put(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol);
-
 extern int moon_dfc_put(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol);
 
@@ -493,8 +490,12 @@ extern struct regmap *arizona_get_regmap_dsp(struct snd_soc_codec *codec);
 extern struct arizona_extcon_info *
 arizona_get_extcon_info(struct snd_soc_codec *codec);
 
+extern bool arizona_get_moisture_state(struct snd_soc_codec *codec);
+
 extern int arizona_enable_force_bypass(struct snd_soc_codec *codec);
 extern int arizona_disable_force_bypass(struct snd_soc_codec *codec);
+
+extern unsigned int arizona_dsp_status(struct snd_soc_codec *codec, unsigned int dsp_num);
 
 extern const char *arizona_sample_rate_val_to_name(unsigned int rate_val);
 

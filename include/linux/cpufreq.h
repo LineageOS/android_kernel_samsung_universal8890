@@ -85,6 +85,8 @@ struct cpufreq_policy {
 	void			*governor_data;
 	bool			governor_enabled; /* governor start/stop flag */
 
+	unsigned int		hcpus_count; /* number of core to be offed */
+
 	struct work_struct	update; /* if update_policy() needs to be
 					 * called, but you're in IRQ context */
 
@@ -147,6 +149,8 @@ int cpufreq_get_global_kobject(void);
 void cpufreq_put_global_kobject(void);
 int cpufreq_sysfs_create_file(const struct attribute *attr);
 void cpufreq_sysfs_remove_file(const struct attribute *attr);
+int cpufreq_sysfs_create_group(const struct attribute_group *attr_grp);
+void cpufreq_sysfs_remove_group(const struct attribute_group *attr_grp);
 
 #ifdef CONFIG_CPU_FREQ
 unsigned int cpufreq_get(unsigned int cpu);
@@ -591,6 +595,7 @@ static inline int cpufreq_boost_enabled(void)
 #endif
 /* the following funtion is for cpufreq core use only */
 struct cpufreq_frequency_table *cpufreq_frequency_get_table(unsigned int cpu);
+struct cpufreq_frequency_table *cpufreq_get_info_table(unsigned int cpu);
 
 /* the following are really really optional */
 extern struct freq_attr cpufreq_freq_attr_scaling_available_freqs;

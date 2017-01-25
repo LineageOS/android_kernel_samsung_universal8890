@@ -97,7 +97,8 @@ static void arizona_haptics_work(struct work_struct *work)
 
 		ret = regmap_update_bits(arizona->regmap,
 					 ARIZONA_HAPTICS_CONTROL_1,
-					 ARIZONA_HAP_CTRL_MASK, 0);
+					 ARIZONA_HAP_CTRL_MASK,
+					 1 << ARIZONA_HAP_CTRL_SHIFT);
 		if (ret != 0) {
 			dev_err(arizona->dev, "Failed to stop haptics: %d\n",
 				ret);

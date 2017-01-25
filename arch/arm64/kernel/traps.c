@@ -37,6 +37,9 @@
 #include <asm/stacktrace.h>
 #include <asm/exception.h>
 #include <asm/system_misc.h>
+#ifdef CONFIG_SEC_DEBUG
+#include <linux/sec_debug.h>
+#endif
 
 static const char *handler[]= {
 	"Synchronous Abort",
@@ -129,7 +132,11 @@ static void dump_instr(const char *lvl, struct pt_regs *regs)
 	set_fs(fs);
 }
 
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk, bool auto_summary)
+#else
 static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
+#endif
 {
 	struct stackframe frame;
 
@@ -155,7 +162,17 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 		frame.pc = thread_saved_pc(tsk);
 	}
 
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+	if (auto_summary) {
+		pr_auto_once(2);
+		pr_auto(ASL2, "Call trace:\n");
+	}
+	else
+		pr_emerg("Call trace:\n");
+#else
 	pr_emerg("Call trace:\n");
+#endif
+
 	while (1) {
 		unsigned long where = frame.pc;
 		int ret;
@@ -163,15 +180,36 @@ static void dump_backtrace(struct pt_regs *regs, struct task_struct *tsk)
 		ret = unwind_frame(&frame);
 		if (ret < 0)
 			break;
+
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+		if (auto_summary)
+			pr_auto(ASL2, "[<%p>] %pS\n", (void *)where, (void *)where);
+		else
+			dump_backtrace_entry(where, frame.sp);
+#else
 		dump_backtrace_entry(where, frame.sp);
+#endif
 	}
+
 }
 
 void show_stack(struct task_struct *tsk, unsigned long *sp)
 {
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+	dump_backtrace(NULL, tsk, false);
+#else
 	dump_backtrace(NULL, tsk);
+#endif
 	barrier();
 }
+
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+void show_stack_auto_summary(struct task_struct *tsk, unsigned long *sp)
+{
+	dump_backtrace(NULL, tsk, true);
+	barrier();
+}
+#endif
 
 #ifdef CONFIG_PREEMPT
 #define S_PREEMPT " PREEMPT"
@@ -207,7 +245,13 @@ static int __die(const char *str, int err, struct thread_info *thread,
 	if (!user_mode(regs) || in_interrupt()) {
 		dump_mem(KERN_EMERG, "Stack: ", regs->sp,
 			 THREAD_SIZE + (unsigned long)task_stack_page(tsk));
-		dump_backtrace(regs, tsk);
+
+#ifdef CONFIG_KFAULT_AUTO_SUMMARY
+		dump_backtrace(NULL, tsk, true);
+#else
+		dump_backtrace(NULL, tsk);
+#endif
+
 		dump_instr(KERN_EMERG, regs);
 	}
 
@@ -221,6 +265,7 @@ static DEFINE_RAW_SPINLOCK(die_lock);
  */
 void die(const char *str, struct pt_regs *regs, int err)
 {
+	enum bug_trap_type bug_type = BUG_TRAP_TYPE_NONE;
 	struct thread_info *thread = current_thread_info();
 	int ret;
 
@@ -229,6 +274,12 @@ void die(const char *str, struct pt_regs *regs, int err)
 	raw_spin_lock_irq(&die_lock);
 	console_verbose();
 	bust_spinlocks(1);
+
+	if (!user_mode(regs))
+		bug_type = report_bug(regs->pc, regs);
+	if (bug_type != BUG_TRAP_TYPE_NONE)
+		str = "Oops - BUG";
+
 	ret = __die(str, err, thread, regs);
 
 	if (regs && kexec_should_crash(thread->task))
@@ -239,10 +290,24 @@ void die(const char *str, struct pt_regs *regs, int err)
 	raw_spin_unlock_irq(&die_lock);
 	oops_exit();
 
+#if defined(CONFIG_SEC_DEBUG)
+	sec_debug_store_backtrace(regs);
+
+	if (in_interrupt())
+		panic("%s\nPC is at %pS\nLR is at %pS",
+				"Fatal exception in interrupt", (void *)regs->pc,
+				compat_user_mode(regs) ? (void *)regs->compat_lr : (void *)regs->regs[30]);
+	if (panic_on_oops)
+		panic("%s\nPC is at %pS\nLR is at %pS",
+				"Fatal exception", (void *)regs->pc,
+				compat_user_mode(regs) ? (void *)regs->compat_lr : (void *)regs->regs[30]);
+#else
 	if (in_interrupt())
 		panic("Fatal exception in interrupt");
 	if (panic_on_oops)
 		panic("Fatal exception");
+#endif
+
 	if (ret != NOTIFY_STOP)
 		do_exit(SIGSEGV);
 }
@@ -322,6 +387,13 @@ exit:
 	return fn ? fn(regs, instr) : 1;
 }
 
+#ifdef CONFIG_GENERIC_BUG
+int is_valid_bugaddr(unsigned long pc)
+{
+	return 1;
+}
+#endif
+
 asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 {
 	siginfo_t info;
@@ -345,6 +417,11 @@ asmlinkage void __exception do_undefinstr(struct pt_regs *regs)
 	info.si_errno = 0;
 	info.si_code  = ILL_ILLOPC;
 	info.si_addr  = pc;
+
+#ifdef CONFIG_SEC_DEBUG
+	if (!user_mode(regs))
+		sec_debug_store_fault_addr(-1, regs);
+#endif
 
 	arm64_notify_die("Oops - undefined instruction", regs, &info, 0);
 }
@@ -382,7 +459,7 @@ asmlinkage void bad_mode(struct pt_regs *regs, int reason, unsigned int esr)
 	void __user *pc = (void __user *)instruction_pointer(regs);
 	console_verbose();
 
-	pr_crit("Bad mode in %s handler detected, code 0x%08x\n",
+	pr_auto(ASL1, "Bad mode in %s handler detected, code 0x%08x\n",
 		handler[reason], esr);
 	__show_regs(regs);
 

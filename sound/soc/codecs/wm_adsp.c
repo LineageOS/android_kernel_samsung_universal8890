@@ -680,23 +680,54 @@ static int wm_adsp_fw_get(struct snd_kcontrol *kcontrol,
 	return 0;
 }
 
+static int wm_adsp2_start_dsp(struct wm_adsp *dsp);
+static int wm_adsp2_shutdown_dsp(struct wm_adsp *dsp);
+static void wm_adsp2_set_dspclk(struct wm_adsp *dsp, unsigned int freq);
+
 static int wm_adsp_fw_put(struct snd_kcontrol *kcontrol,
 			  struct snd_ctl_elem_value *ucontrol)
 {
 	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
+	struct snd_soc_card *card = codec->component.card;
 	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
-	struct wm_adsp *dsp = snd_soc_codec_get_drvdata(codec);
+	struct wm_adsp *dsps = snd_soc_codec_get_drvdata(codec);
+	struct wm_adsp *dsp = &dsps[e->shift_l];
+	int ret;
 
-	if (ucontrol->value.integer.value[0] == dsp[e->shift_l].fw)
+	if (ucontrol->value.integer.value[0] == dsp->fw)
 		return 0;
 
-	if (ucontrol->value.integer.value[0] >= dsp[e->shift_l].num_firmwares)
+	if (ucontrol->value.integer.value[0] >= dsp->num_firmwares)
 		return -EINVAL;
 
-	if (dsp[e->shift_l].running)
-		return -EBUSY;
+	switch (dsp->type) {
+	case WMFW_ADSP2:
+		if (dsp->rev == 2 && dsp->running)
+			break;
+		/* fall through for rev other than 2 */
+	case WMFW_ADSP1:
+		if (dsp->running)
+			return -EBUSY;
+		dsp->fw = ucontrol->value.integer.value[0];
+		return 0;
+	default:
+		return -EINVAL;
+	}
 
-	dsp[e->shift_l].fw = ucontrol->value.integer.value[0];
+
+	/* change fw on a running dsp */
+	mutex_lock_nested(&card->dapm_mutex,
+		SND_SOC_DAPM_CLASS_RUNTIME);
+
+	wm_adsp2_shutdown_dsp(dsp);
+	dsp->fw = ucontrol->value.integer.value[0];
+	wm_adsp2_set_dspclk(dsp, dsp->freq_cache);
+	queue_work(system_unbound_wq, &dsp->boot_work);
+	ret = wm_adsp2_start_dsp(dsp);
+	if (ret != 0)
+		wm_adsp2_shutdown_dsp(dsp);
+
+	mutex_unlock(&card->dapm_mutex);
 
 	return 0;
 }
@@ -1665,24 +1696,22 @@ static int wm_adsp_load(struct wm_adsp *dsp)
 	if (file == NULL)
 		return -ENOMEM;
 
-	if (dsp->part_rev) {
+	if (dsp->firmwares[dsp->fw].full_name)
+		snprintf(file, PAGE_SIZE, "%s",
+			 dsp->firmwares[dsp->fw].file);
+	else if (dsp->part_rev)
 		snprintf(file, PAGE_SIZE, "%s%c-dsp%d-%s.wmfw",
 			 dsp->part, dsp->part_rev, dsp->num,
 			 dsp->firmwares[dsp->fw].file);
-		file[PAGE_SIZE - 1] = '\0';
-
-		mutex_lock(dsp->fw_lock);
-		ret = request_firmware(&firmware, file, dsp->dev);
-		mutex_unlock(dsp->fw_lock);
-	} else {
+	else
 		snprintf(file, PAGE_SIZE, "%s-dsp%d-%s.wmfw", dsp->part,
 			 dsp->num, dsp->firmwares[dsp->fw].file);
-		file[PAGE_SIZE - 1] = '\0';
 
-		mutex_lock(dsp->fw_lock);
-		ret = request_firmware(&firmware, file, dsp->dev);
-		mutex_unlock(dsp->fw_lock);
-	}
+	file[PAGE_SIZE - 1] = '\0';
+	mutex_lock(dsp->fw_lock);
+	ret = request_firmware(&firmware, file, dsp->dev);
+	mutex_unlock(dsp->fw_lock);
+
 	if (ret != 0) {
 		adsp_err(dsp, "Failed to request: '%s'\n", file);
 		goto out;
@@ -2237,7 +2266,10 @@ static int wm_adsp_load_coeff(struct wm_adsp *dsp)
 	if (file == NULL)
 		return -ENOMEM;
 
-	if (dsp->firmwares[dsp->fw].binfile)
+	if (dsp->firmwares[dsp->fw].binfile && dsp->firmwares[dsp->fw].full_name)
+		snprintf(file, PAGE_SIZE, "%s",
+			dsp->firmwares[dsp->fw].binfile);
+	else if (dsp->firmwares[dsp->fw].binfile)
 		snprintf(file, PAGE_SIZE, "%s-dsp%d-%s.bin", dsp->part,
 			 dsp->num, dsp->firmwares[dsp->fw].binfile);
 	else
@@ -2721,6 +2753,7 @@ int wm_adsp2_early_event(struct snd_soc_dapm_widget *w,
 
 	switch (event) {
 	case SND_SOC_DAPM_PRE_PMU:
+		dsp->freq_cache = freq;
 		wm_adsp2_set_dspclk(dsp, freq);
 		queue_work(system_unbound_wq, &dsp->boot_work);
 		break;
@@ -2784,114 +2817,131 @@ static inline void wm_adsp_stop_watchdog(struct wm_adsp *dsp)
 	}
 }
 
+static int wm_adsp2_start_dsp(struct wm_adsp *dsp)
+{
+	int ret;
+
+	flush_work(&dsp->boot_work);
+
+	if (!dsp->running)
+		return -EIO;
+
+	wm_adsp2_lock(dsp, dsp->lock_regions);
+
+	ret = regmap_update_bits(dsp->regmap,
+			dsp->base + ADSP2_CONTROL,
+			ADSP2_CORE_ENA | ADSP2_START,
+			ADSP2_CORE_ENA | ADSP2_START);
+	if (ret != 0)
+		return ret;
+
+	if (dsp->fw_features.host_read_buf &&
+	    dsp->firmwares[dsp->fw].num_caps != 0) {
+		ret = wm_adsp_init_host_buf_info(&dsp->compr_buf);
+		if (ret < 0) {
+			adsp_err(dsp,
+				"Failed to init host buffer (%d)\n",
+				ret);
+			return ret;
+		}
+	}
+
+	return 0;
+}
+
+static int wm_adsp2_shutdown_dsp(struct wm_adsp *dsp)
+{
+	struct wm_coeff_ctl *ctl;
+
+	/* Log firmware state, it can be useful for analysis */
+	switch (dsp->rev) {
+	case 0:
+		wm_adsp2_show_fw_status(dsp);
+		break;
+	default:
+		wm_adsp2v2_show_fw_status(dsp);
+		break;
+	};
+
+	if (dsp->fw_features.edac_shutdown)
+		wm_adsp_edac_shutdown(dsp);
+	else
+		wm_adsp_signal_event_controls(dsp,
+					      WM_ADSP_FW_EVENT_SHUTDOWN);
+
+	wm_adsp_stop_watchdog(dsp);
+
+	dsp->running = false;
+
+	if (dsp->fw_features.host_read_buf) {
+		adsp_dbg(dsp, "host buf invalidated by DSP shutdown\n");
+		wm_adsp_free_host_buf_info(&dsp->compr_buf);
+	}
+
+	wm_adsp_debugfs_clear(dsp);
+
+	dsp->fw_id = 0;
+	dsp->fw_id_version = 0;
+	dsp->running = false;
+
+	switch (dsp->rev) {
+	case 0:
+		regmap_update_bits(dsp->regmap,
+				   dsp->base + ADSP2_CONTROL,
+				   ADSP2_SYS_ENA | ADSP2_CORE_ENA |
+				   ADSP2_START, 0);
+
+		/* Make sure DMAs are quiesced */
+		regmap_write(dsp->regmap,
+				 dsp->base + ADSP2_WDMA_CONFIG_1, 0);
+		regmap_write(dsp->regmap,
+				 dsp->base + ADSP2_WDMA_CONFIG_2, 0);
+		regmap_write(dsp->regmap,
+				 dsp->base + ADSP2_RDMA_CONFIG_1, 0);
+		break;
+	default:
+		regmap_update_bits(dsp->regmap,
+				   dsp->base + ADSP2_CONTROL,
+				   ADSP2_MEM_ENA | ADSP2_SYS_ENA |
+				   ADSP2_CORE_ENA | ADSP2_START, 0);
+
+		/* Make sure DMAs are quiesced */
+		regmap_write(dsp->regmap,
+				 dsp->base + ADSP2_WDMA_CONFIG_1, 0);
+		regmap_write(dsp->regmap,
+				 dsp->base + ADSP2V2_WDMA_CONFIG_2, 0);
+		regmap_write(dsp->regmap,
+				 dsp->base + ADSP2_RDMA_CONFIG_1, 0);
+		break;
+	}
+
+	list_for_each_entry(ctl, &dsp->ctl_list, list)
+		ctl->enabled = 0;
+
+	wm_adsp_free_alg_regions(dsp);
+
+	adsp_info(dsp, "Shutdown complete\n");
+
+	return 0;
+}
+
 int wm_adsp2_event(struct snd_soc_dapm_widget *w,
 		   struct snd_kcontrol *kcontrol, int event)
 {
 	struct snd_soc_codec *codec = w->codec;
 	struct wm_adsp *dsps = snd_soc_codec_get_drvdata(codec);
 	struct wm_adsp *dsp = &dsps[w->shift];
-	struct wm_coeff_ctl *ctl;
 	int ret;
 
 	switch (event) {
 	case SND_SOC_DAPM_POST_PMU:
-		flush_work(&dsp->boot_work);
-
-		if (!dsp->running)
-			return -EIO;
-
-		wm_adsp2_lock(dsp, dsp->lock_regions);
-
-		ret = regmap_update_bits(dsp->regmap,
-			 dsp->base + ADSP2_CONTROL,
-			 ADSP2_CORE_ENA | ADSP2_START,
-			 ADSP2_CORE_ENA | ADSP2_START);
-
+		ret = wm_adsp2_start_dsp(dsp);
 		if (ret != 0)
 			goto err;
-
-		if (dsp->fw_features.host_read_buf &&
-		    dsp->firmwares[dsp->fw].num_caps != 0) {
-			ret = wm_adsp_init_host_buf_info(&dsp->compr_buf);
-			if (ret < 0) {
-				adsp_err(dsp,
-					"Failed to init host buffer (%d)\n",
-					ret);
-				goto err;
-			}
-		}
-
 		break;
-
 	case SND_SOC_DAPM_PRE_PMD:
-		/* Log firmware state, it can be useful for analysis */
-		switch (dsp->rev) {
-		case 0:
-			wm_adsp2_show_fw_status(dsp);
-			break;
-		default:
-			wm_adsp2v2_show_fw_status(dsp);
-			break;
-		};
-
-		if (dsp->fw_features.edac_shutdown)
-			wm_adsp_edac_shutdown(dsp);
-		else
-			wm_adsp_signal_event_controls(dsp,
-						     WM_ADSP_FW_EVENT_SHUTDOWN);
-
-		wm_adsp_stop_watchdog(dsp);
-
-		if (dsp->fw_features.host_read_buf) {
-			adsp_dbg(dsp, "host buf invalidated by DSP shutdown\n");
-			wm_adsp_free_host_buf_info(&dsp->compr_buf);
-		}
-
-		wm_adsp_debugfs_clear(dsp);
-
-		dsp->fw_id = 0;
-		dsp->fw_id_version = 0;
-		dsp->running = false;
-
-		switch (dsp->rev) {
-		case 0:
-			regmap_update_bits(dsp->regmap,
-					   dsp->base + ADSP2_CONTROL,
-					   ADSP2_SYS_ENA | ADSP2_CORE_ENA |
-					   ADSP2_START, 0);
-
-			/* Make sure DMAs are quiesced */
-			regmap_write(dsp->regmap,
-				     dsp->base + ADSP2_WDMA_CONFIG_1, 0);
-			regmap_write(dsp->regmap,
-				     dsp->base + ADSP2_WDMA_CONFIG_2, 0);
-			regmap_write(dsp->regmap,
-				     dsp->base + ADSP2_RDMA_CONFIG_1, 0);
-			break;
-		default:
-			regmap_update_bits(dsp->regmap,
-					   dsp->base + ADSP2_CONTROL,
-					   ADSP2_MEM_ENA | ADSP2_SYS_ENA |
-					   ADSP2_CORE_ENA | ADSP2_START, 0);
-
-			/* Make sure DMAs are quiesced */
-			regmap_write(dsp->regmap,
-				     dsp->base + ADSP2_WDMA_CONFIG_1, 0);
-			regmap_write(dsp->regmap,
-				     dsp->base + ADSP2V2_WDMA_CONFIG_2, 0);
-			regmap_write(dsp->regmap,
-				     dsp->base + ADSP2_RDMA_CONFIG_1, 0);
-			break;
-		}
-
-		list_for_each_entry(ctl, &dsp->ctl_list, list)
-			ctl->enabled = 0;
-
-		wm_adsp_free_alg_regions(dsp);
-
-		adsp_info(dsp, "Shutdown complete\n");
+		wm_adsp2_shutdown_dsp(dsp);
 		break;
-
 	default:
 		break;
 	}
@@ -3010,6 +3060,9 @@ static int wm_adsp_of_parse_firmware(struct wm_adsp *dsp,
 					      &dsp->firmwares[i].binfile);
 		if (ret < 0)
 			dsp->firmwares[i].binfile = NULL;
+
+		dsp->firmwares[i].full_name =
+			of_property_read_bool(fw, "wlf,full-name");
 
 		wm_adsp_of_parse_caps(dsp, fw, &dsp->firmwares[i]);
 
@@ -3686,8 +3739,9 @@ int wm_adsp_compr_irq(struct wm_adsp_compr *compr, bool *trigger)
 	mutex_lock(&buf->lock);
 
 	if (!buf->host_buf_ptr) {
-		adsp_warn(buf->dsp, "No host buffer info\n");
-		ret = -EIO;
+		if (trigger)
+			*trigger = true;
+		ret = 0;
 		goto out_buf_unlock;
 	}
 
@@ -4053,5 +4107,62 @@ exit:
 	return IRQ_HANDLED;
 }
 EXPORT_SYMBOL_GPL(wm_adsp2_bus_error);
+
+void wm_adsp_control_dump(const struct wm_adsp *adsp)
+{
+	struct wm_coeff_ctl *ctl;
+	struct wm_adsp_alg_region *alg;
+	char *buf;
+	char prefix[SNDRV_CTL_ELEM_ID_NAME_MAXLEN];
+
+	if (!adsp->running) {
+		adsp_info(adsp, "%s: DSP not running\n", __func__);
+		return;
+	}
+
+	buf = kmalloc(512, GFP_KERNEL);
+	if (!buf) {
+		adsp_err(adsp, "%s: cannot allocate buffer\n", __func__);
+		return;
+	}
+
+	/* for each algorithm-id of this DSP */
+	list_for_each_entry(alg, &adsp->alg_regions, list) {
+
+		/* for each ALSA control of this DSP */
+		list_for_each_entry(ctl, &adsp->ctl_list, list) {
+
+			/* if alg-id is found in ALSA control name */
+			if ((alg->alg == ctl->alg_region.alg) &&
+			    (alg->type == ctl->alg_region.type)) {
+
+				/* if that control is enabled */
+				if (ctl->enabled == 1) {
+
+					/* read the control and dump it */
+					if (!wm_coeff_read_control(ctl, buf,
+						ctl->len)) {
+
+						snprintf(prefix, SNDRV_CTL_ELEM_ID_NAME_MAXLEN, "%s - ",
+							 ctl->name);
+
+						print_hex_dump(KERN_DEBUG,
+							prefix,
+							DUMP_PREFIX_NONE,
+							32, 1,
+							buf,
+							ctl->len, false);
+					} else
+						adsp_warn(adsp,
+							"%s: could not read: %s\n",
+							__func__, ctl->name);
+				}
+			}
+		}
+	}
+
+	kfree(buf);
+}
+EXPORT_SYMBOL_GPL(wm_adsp_control_dump);
 
 MODULE_LICENSE("GPL v2");

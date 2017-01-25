@@ -2329,33 +2329,6 @@ exit:
 }
 EXPORT_SYMBOL_GPL(arizona_ip_mode_put);
 
-int moon_in_rate_put(struct snd_kcontrol *kcontrol,
-	struct snd_ctl_elem_value *ucontrol)
-{
-	struct snd_soc_codec *codec = snd_soc_kcontrol_codec(kcontrol);
-	struct soc_enum *e = (struct soc_enum *)kcontrol->private_value;
-	unsigned int reg, mask;
-	int ret = 0;
-
-	mutex_lock_nested(&codec->component.card->dapm_mutex, SND_SOC_DAPM_CLASS_RUNTIME);
-
-	/* Cannot change rate on an active input */
-	reg = snd_soc_read(codec, ARIZONA_INPUT_ENABLES);
-	mask = (e->reg - ARIZONA_IN1L_CONTROL) / 4;
-	mask ^= 0x1; /* Flip bottom bit for channel order */
-
-	if ((reg) & (1 << mask)) {
-		ret = -EBUSY;
-		goto exit;
-	}
-
-	ret = snd_soc_put_enum_double(kcontrol, ucontrol);
-exit:
-	mutex_unlock(&codec->component.card->dapm_mutex);
-	return ret;
-}
-EXPORT_SYMBOL_GPL(moon_in_rate_put);
-
 int moon_dfc_put(struct snd_kcontrol *kcontrol,
 	struct snd_ctl_elem_value *ucontrol)
 {
@@ -3598,6 +3571,15 @@ static int arizona_startup(struct snd_pcm_substream *substream,
 	struct arizona_dai_priv *dai_priv = &priv->dai[dai->id - 1];
 	unsigned int base_rate;
 
+	switch (priv->arizona->type) {
+	case WM1840:
+	case CS47L90:
+	case CS47L91:
+		return 0;
+	default:
+		break;
+	}
+
 	switch (dai_priv->clk) {
 	case ARIZONA_CLK_SYSCLK:
 	case ARIZONA_CLK_SYSCLK_2:
@@ -4227,10 +4209,18 @@ static int arizona_validate_fll(struct arizona_fll *fll,
 				unsigned int fin,
 				unsigned int fvco)
 {
-	if (fll->fvco && fvco != fll->fvco) {
-		arizona_fll_err(fll,
+	switch (fll->arizona->type) {
+	case WM1840:
+	case CS47L90:
+	case CS47L91:
+		break;
+	default:
+		if (fll->fvco && fvco != fll->fvco) {
+			arizona_fll_err(fll,
 				"Can't change output on active FLL\n");
-		return -EINVAL;
+			return -EINVAL;
+		}
+		break;
 	}
 
 	if (fin / ARIZONA_FLL_MAX_REFDIV > ARIZONA_FLL_MAX_FREF) {
@@ -4649,11 +4639,11 @@ static int arizona_enable_fll(struct arizona_fll *fll)
 
 	if (already_enabled) {
 		/* Facilitate smooth refclk across the transition */
-		regmap_update_bits_async(fll->arizona->regmap, fll->base + 0x9,
-					 ARIZONA_FLL1_GAIN_MASK, 0);
 		regmap_update_bits(fll->arizona->regmap, fll->base + 1,
 				   ARIZONA_FLL1_FREERUN, ARIZONA_FLL1_FREERUN);
 		udelay(32);
+		regmap_update_bits_async(fll->arizona->regmap, fll->base + 0x9,
+					 ARIZONA_FLL1_GAIN_MASK, 0);
 	}
 
 	/*
@@ -5144,6 +5134,17 @@ arizona_get_extcon_info(struct snd_soc_codec *codec)
 }
 EXPORT_SYMBOL_GPL(arizona_get_extcon_info);
 
+bool arizona_get_moisture_state(struct snd_soc_codec *codec)
+{
+	struct arizona *arizona = dev_get_drvdata(codec->dev->parent);
+	bool ret = arizona->moisture_detected;
+
+	arizona->moisture_detected = false;
+
+	return ret;
+}
+EXPORT_SYMBOL_GPL(arizona_get_moisture_state);
+
 static int arizona_set_force_bypass(struct snd_soc_codec *codec,
 	bool set_bypass)
 {
@@ -5197,6 +5198,14 @@ int arizona_disable_force_bypass(struct snd_soc_codec *codec)
 	return arizona_set_force_bypass(codec, false);
 }
 EXPORT_SYMBOL_GPL(arizona_disable_force_bypass);
+
+unsigned int arizona_dsp_status(struct snd_soc_codec *codec, unsigned int dsp_num)
+{
+	struct wm_adsp *dsps = snd_soc_codec_get_drvdata(codec);
+
+	return dsps[dsp_num].running;
+}
+EXPORT_SYMBOL_GPL(arizona_dsp_status);
 
 static bool arizona_eq_filter_unstable(bool mode, __be16 _a, __be16 _b)
 {

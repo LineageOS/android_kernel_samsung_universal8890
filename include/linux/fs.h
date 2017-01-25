@@ -455,6 +455,8 @@ struct block_device {
 	int			bd_fsfreeze_count;
 	/* Mutex for freeze */
 	struct mutex		bd_fsfreeze_mutex;
+
+	void			(*bd_fscallback_func) (struct block_device *);
 };
 
 /*
@@ -1514,6 +1516,7 @@ struct file_operations {
 	long (*fallocate)(struct file *file, int mode, loff_t offset,
 			  loff_t len);
 	int (*show_fdinfo)(struct seq_file *m, struct file *f);
+	struct file* (*get_lower_file)(struct file *f);
 };
 
 struct inode_operations {
@@ -1594,6 +1597,7 @@ struct super_operations {
 	int (*bdev_try_to_free_page)(struct super_block*, struct page*, gfp_t);
 	long (*nr_cached_objects)(struct super_block *, int);
 	long (*free_cached_objects)(struct super_block *, long, int);
+	long (*unlink_callback)(struct super_block *, char *);
 };
 
 /*
@@ -2277,6 +2281,8 @@ static inline int generic_write_sync(struct file *file, loff_t pos, loff_t count
 }
 extern void emergency_sync(void);
 extern void emergency_remount(void);
+extern int intr_sync(int *);
+
 #ifdef CONFIG_BLOCK
 extern sector_t bmap(struct inode *, sector_t);
 #endif

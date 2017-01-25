@@ -19,6 +19,7 @@
 #include <asm/cpu.h>
 #include <asm/cputype.h>
 #include <asm/cpufeature.h>
+#include <asm/smp_plat.h>
 
 #include <linux/bitops.h>
 #include <linux/bug.h>
@@ -114,6 +115,15 @@ static void cpuinfo_sanity_check(struct cpuinfo_arm64 *cur)
 	unsigned int cpu = smp_processor_id();
 	struct cpuinfo_arm64 *boot = &boot_cpu_data;
 	unsigned int diff = 0;
+
+#ifdef CONFIG_SOC_EXYNOS8890
+	/*
+	 * HACK: In Exynos8890, the sanity check for cluster '0' is meaningless
+	 * because it consists of non-arm CPUs.
+	 */
+	if (!MPIDR_AFFINITY_LEVEL(cpu_logical_map(cpu), 1))
+		return;
+#endif
 
 	/*
 	 * The kernel can handle differing I-cache policies, but otherwise

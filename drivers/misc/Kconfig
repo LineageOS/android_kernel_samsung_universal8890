@@ -544,4 +544,6 @@ source "drivers/misc/mic/Kconfig"
 source "drivers/misc/genwqe/Kconfig"
 source "drivers/misc/echo/Kconfig"
 source "drivers/misc/cxl/Kconfig"
+source "drivers/misc/mcu_ipc/Kconfig"
+source "drivers/misc/modem_v1/Kconfig"
 endmenu

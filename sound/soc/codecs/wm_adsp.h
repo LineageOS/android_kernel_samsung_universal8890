@@ -75,6 +75,7 @@ struct wm_adsp_fw_defs {
 	const char *name;
 	const char *file;
 	const char *binfile;
+	bool full_name;
 	int compr_direction;
 	int num_caps;
 	struct wm_adsp_fw_caps *caps;
@@ -132,6 +133,8 @@ struct wm_adsp {
 	struct mutex rate_lock;
 	int (*rate_put_cb) (struct wm_adsp *adsp, unsigned int mask,
 			    unsigned int val);
+
+	unsigned int freq_cache;
 
 	struct list_head alg_regions;
 
@@ -223,6 +226,8 @@ extern int wm_adsp_compr_copy(struct snd_compr_stream *stream,
 			      char __user *buf, size_t count);
 extern void wm_adsp_compr_init(struct wm_adsp *dsp, struct wm_adsp_compr *compr);
 extern void wm_adsp_compr_destroy(struct wm_adsp_compr *compr);
+
+extern void wm_adsp_control_dump(const struct wm_adsp *adsp);
 
 #endif
 

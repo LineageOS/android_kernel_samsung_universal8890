@@ -79,6 +79,14 @@
 #include <linux/random.h>
 #include <linux/list.h>
 
+#if defined(CONFIG_SEC_BSP)
+#include <linux/sec_bsp.h>
+#endif
+
+#if defined(CONFIG_SEC_INITCALL_DEBUG)
+#include <linux/sec_debug.h>
+#endif
+
 #include <asm/io.h>
 #include <asm/bugs.h>
 #include <asm/setup.h>
@@ -89,6 +97,10 @@
 #include <asm/smp.h>
 #endif
 
+#ifdef CONFIG_RELOCATABLE_KERNEL
+#include <linux/memblock.h>
+#endif
+
 static int kernel_init(void *);
 
 extern void init_IRQ(void);
@@ -96,6 +108,10 @@ extern void fork_init(unsigned long);
 extern void radix_tree_init(void);
 #ifndef CONFIG_DEBUG_RODATA
 static inline void mark_rodata_ro(void) { }
+#endif
+
+#ifdef CONFIG_PTRACK_DEBUG
+extern void ptrack_init(void);
 #endif
 
 /*
@@ -158,6 +174,28 @@ static int __init set_reset_devices(char *str)
 }
 
 __setup("reset_devices", set_reset_devices);
+
+#ifdef CONFIG_RELOCATABLE_KERNEL
+static unsigned long kaslr_mem  __initdata; 
+static unsigned long kaslr_size  __initdata; 
+
+static int __init set_kaslr_region(char *str){
+	char *endp;
+
+	kaslr_size = memparse(str, &endp);
+	if( *endp == '@')
+	  kaslr_mem = memparse(endp+1, NULL);
+
+	if (memblock_reserve(kaslr_mem, kaslr_size)) {
+			pr_err("%s: failed reserving size %lx " \
+						"at base 0x%lx\n", __func__, kaslr_size, kaslr_mem);
+			return -1;
+	}
+	pr_info("kaslr :%s, base:%lx, size:%lx \n", __func__, kaslr_mem, kaslr_size);
+	return 0;
+}
+__setup("kaslr_region=", set_kaslr_region);
+#endif
 
 static const char *argv_init[MAX_INIT_ARGS+2] = { "init", NULL, };
 const char *envp_init[MAX_INIT_ENVS+2] = { "HOME=/", "TERM=linux", NULL, };
@@ -495,6 +533,9 @@ static void __init mm_init(void)
 	percpu_init_late();
 	pgtable_init();
 	vmalloc_init();
+#ifdef CONFIG_PTRACK_DEBUG
+	ptrack_init();
+#endif
 }
 
 asmlinkage __visible void __init start_kernel(void)
@@ -560,6 +601,10 @@ asmlinkage __visible void __init start_kernel(void)
 	sort_main_extable();
 	trap_init();
 	mm_init();
+
+#if defined(CONFIG_SEC_BSP)
+	sec_boot_stat_get_start_kernel();
+#endif
 
 	/*
 	 * Set up the scheduler prior starting any interrupts (such as the
@@ -764,14 +809,22 @@ static int __init_or_module do_one_initcall_debug(initcall_t fn)
 	unsigned long long duration;
 	int ret;
 
-	printk(KERN_DEBUG "calling  %pF @ %i\n", fn, task_pid_nr(current));
+	if (initcall_debug)
+		pr_debug("calling  %pF @ %i\n", fn, task_pid_nr(current));
+
 	calltime = ktime_get();
 	ret = fn();
 	rettime = ktime_get();
 	delta = ktime_sub(rettime, calltime);
 	duration = (unsigned long long) ktime_to_ns(delta) >> 10;
-	printk(KERN_DEBUG "initcall %pF returned %d after %lld usecs\n",
-		 fn, ret, duration);
+	if (initcall_debug)
+		pr_debug("initcall %pF returned %d after %lld usecs\n",
+			 fn, ret, duration);
+
+#if defined(CONFIG_SEC_INITCALL_DEBUG)
+	if (SEC_INITCALL_DEBUG_MIN_TIME < duration)
+		sec_initcall_debug_add(fn, duration);
+#endif
 
 	return ret;
 }
@@ -785,10 +838,14 @@ int __init_or_module do_one_initcall(initcall_t fn)
 	if (initcall_blacklisted(fn))
 		return -EPERM;
 
+#if defined(CONFIG_SEC_INITCALL_DEBUG)
+	ret = do_one_initcall_debug(fn);
+#else
 	if (initcall_debug)
 		ret = do_one_initcall_debug(fn);
 	else
 		ret = fn();
+#endif
 
 	msgbuf[0] = 0;
 
@@ -854,6 +911,10 @@ static void __init do_initcall_level(int level)
 
 	for (fn = initcall_levels[level]; fn < initcall_levels[level+1]; fn++)
 		do_one_initcall(*fn);
+
+#if defined(CONFIG_SEC_BSP)
+	sec_boot_stat_add_initcall(initcall_level_names[level]);
+#endif
 }
 
 static void __init do_initcalls(void)
@@ -925,6 +986,38 @@ static int try_to_run_init_process(const char *init_filename)
 	return ret;
 }
 
+#ifdef CONFIG_DEFERRED_INITCALLS
+extern initcall_t __deferred_initcall_start[], __deferred_initcall_end[];
+
+/* call deferred init routines */
+void __ref do_deferred_initcalls(void)
+{
+	initcall_t *call;
+	static int already_run=0;
+
+	if (already_run) {
+		printk("do_deferred_initcalls() has already run\n");
+		return;
+	}
+
+	already_run=1;
+
+	printk("Running do_deferred_initcalls()\n");
+
+	for(call = __deferred_initcall_start;
+		call < __deferred_initcall_end; call++)
+		do_one_initcall(*call);
+
+	flush_scheduled_work();
+
+	free_initmem();
+}
+#endif
+
+#ifdef CONFIG_SEC_GPIO_DVS
+extern void gpio_dvs_check_initgpio(void);
+#endif
+
 static noinline void __init kernel_init_freeable(void);
 
 static int __ref kernel_init(void *unused)
@@ -932,9 +1025,20 @@ static int __ref kernel_init(void *unused)
 	int ret;
 
 	kernel_init_freeable();
+#ifdef CONFIG_SEC_GPIO_DVS
+	/************************ Caution !!! ****************************/
+	/* This function must be located in appropriate INIT position
+	 * in accordance with the specification of each BB vendor.
+	 */
+	/************************ Caution !!! ****************************/
+	pr_info("%s: GPIO DVS: check init gpio\n", __func__);
+	gpio_dvs_check_initgpio();
+#endif
 	/* need to finish all async __init code before freeing the memory */
 	async_synchronize_full();
+#ifndef CONFIG_DEFERRED_INITCALLS
 	free_initmem();
+#endif
 	mark_rodata_ro();
 	system_state = SYSTEM_RUNNING;
 	numa_default_policy();

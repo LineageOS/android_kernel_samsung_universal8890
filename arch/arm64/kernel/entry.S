@@ -70,6 +70,20 @@
 	.if	\regsize == 32
 	mov	w0, w0				// zero upper 32 bits of x0
 	.endif
+
+#ifdef CONFIG_SOC_EXYNOS8890
+	.if     \regsize == 32
+	.if     \el == 0
+	msr     cntp_cval_el0, x0
+	mov     x0, sp
+	lsr     x0, x0, #12
+	tlbi    vaae1, x0
+	dsb     nsh
+	mrs     x0, cntp_cval_el0
+	.endif
+	.endif
+#endif
+
 	push	x28, x29
 	push	x26, x27
 	push	x24, x25
@@ -126,6 +140,13 @@
 	"nop",								\
 	"tbz x22, #4, 1f",						\
 	ARM64_WORKAROUND_845719
+#ifdef CONFIG_SOC_EXYNOS8890
+	alternative_insn						\
+	"nop; nop; nop; nop; nop",					\
+	"mrs x29, midr_el1; lsr x29, x29, #0x04; and x29, x29, #0xfff;	\
+	 cmp x29, #0xd03; b.ne 1f",					\
+	ARM64_WORKAROUND_845719
+#endif
 #ifdef CONFIG_PID_IN_CONTEXTIDR
 	alternative_insn						\
 	"nop; nop",							\
@@ -165,6 +186,10 @@
 	pop	x26, x27
 	pop	x28, x29
 	ldr	lr, [sp], #S_FRAME_SIZE - S_LR	// load LR and restore SP
+
+	.if	\el == 0
+	dsb	nsh
+	.endif
 	eret					// return to kernel
 	.endm
 
@@ -234,7 +259,7 @@ END(vectors)
  * Invalid mode handlers
  */
 	.macro	inv_entry, el, reason, regsize = 64
-	kernel_entry el, \regsize
+	kernel_entry \el, \regsize
 	mov	x0, sp
 	mov	x1, #\reason
 	mrs	x2, esr_el1
@@ -309,7 +334,16 @@ el1_da:
 	 * Data abort handling
 	 */
 	mrs	x0, far_el1
+
 	enable_dbg
+
+	/*
+	 * tlb conflict handling
+	*/
+	and 	x24, x1, #ESR_EL1_ISS_DFSC_MASK
+	cmp     x24, #ESR_EL1_ISS_DFSC_TLB_CONFLICT
+	b.eq	el1_da_tlb_conflict
+
 	// re-enable interrupts if they were enabled in the aborted context
 	tbnz	x23, #7, 1f			// PSR_I_BIT
 	enable_irq
@@ -319,6 +353,10 @@ el1_da:
 
 	// disable interrupts before pulling preserved data off the stack
 	disable_irq
+	kernel_exit 1
+el1_da_tlb_conflict:
+	tlbi vmalle1
+	dsb nsh
 	kernel_exit 1
 el1_sp_pc:
 	/*

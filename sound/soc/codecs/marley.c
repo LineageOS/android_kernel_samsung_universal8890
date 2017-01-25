@@ -351,9 +351,8 @@ static int marley_put_demux(struct snd_kcontrol *kcontrol,
 	/* [1] if HP detection clamp is applied while switching to HPOUT, OUT1
 	 * should remain disabled and EDRE should be set to Manual
 	 */
-	if (!ep_sel && (arizona->hpdet_clamp ||
-			(arizona->hp_impedance_x100 <=
-			 OHM_TO_HOHM(arizona->pdata.hpdet_short_circuit_imp))))
+	if (!ep_sel && (arizona->hpdet_clamp || (arizona->hp_impedance_x100 <=
+			OHM_TO_HOHM(arizona->pdata.hpdet_short_circuit_imp))))
 		restore_out = false;
 
 	if (!ep_sel && arizona->hpdet_clamp) {
@@ -710,7 +709,7 @@ static DECLARE_TLV_DB_SCALE(ana_tlv, 0, 100, 0);
 static DECLARE_TLV_DB_SCALE(eq_tlv, -1200, 100, 0);
 static DECLARE_TLV_DB_SCALE(digital_tlv, -6400, 50, 0);
 static DECLARE_TLV_DB_SCALE(noise_tlv, -13200, 600, 0);
-static DECLARE_TLV_DB_SCALE(ng_tlv, -12000, 600, 0);
+static DECLARE_TLV_DB_SCALE(ng_tlv, -10200, 600, 0);
 
 #define MARLEY_NG_SRC(name, base) \
 	SOC_SINGLE(name " NG OUT1L Switch",  base,  0, 1, 0), \
@@ -1155,7 +1154,7 @@ SND_SOC_DAPM_REGULATOR_SUPPLY("SPKVDD", 0, 0),
 
 SND_SOC_DAPM_SIGGEN("TONE"),
 SND_SOC_DAPM_SIGGEN("NOISE"),
-SND_SOC_DAPM_MIC("HAPTICS", NULL),
+SND_SOC_DAPM_SIGGEN("HAPTICS"),
 
 SND_SOC_DAPM_INPUT("IN1AL"),
 SND_SOC_DAPM_INPUT("IN1AR"),

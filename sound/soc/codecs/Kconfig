@@ -43,6 +43,7 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_ALC5623 if I2C
 	select SND_SOC_ALC5632 if I2C
 	select SND_SOC_CQ0093VC if MFD_DAVINCI_VOICECODEC
+	select SND_SOC_CS35L33 if I2C
 	select SND_SOC_CS35L32 if I2C
 	select SND_SOC_CS42L51_I2C if I2C
 	select SND_SOC_CS42L52 if I2C && INPUT
@@ -69,6 +70,11 @@ config SND_SOC_ALL_CODECS
 	select SND_SOC_MAX98088 if I2C
 	select SND_SOC_MAX98090 if I2C
 	select SND_SOC_MAX98095 if I2C
+	select SND_SOC_MAX98504 if I2C
+	select SND_SOC_MAX98504A if I2C
+	select SND_SOC_MAX98505 if I2C
+	select SND_SOC_MAX98505A if I2C
+	select SND_SOC_MAX98506 if I2C
 	select SND_SOC_MAX9850 if I2C
 	select SND_SOC_MAX9768 if I2C
 	select SND_SOC_MAX9877 if I2C
@@ -351,6 +357,14 @@ config SND_SOC_ALC5632
 config SND_SOC_CQ0093VC
 	tristate
 
+config SND_SOC_CIRRUS_AMP_CAL
+	tristate
+
+config SND_SOC_CS35L33
+	tristate "Cirrus Logic CS35L33 AMP"
+	depends on I2C
+	select SND_SOC_CIRRUS_AMP_CAL
+
 config SND_SOC_CS35L32
 	tristate "Cirrus Logic CS35L32 CODEC"
 	depends on I2C
@@ -465,6 +479,46 @@ config SND_SOC_MAX98090
 
 config SND_SOC_MAX98095
        tristate
+
+config SND_SOC_MAXIM_DSM
+	tristate "Support MAXIM DSM Calibration"
+	default y if SND_SOC_MAX98505A=y
+	default m if SND_SOC_MAX98505A=m
+	default y if SND_SOC_MAX98505=y
+	default m if SND_SOC_MAX98505=m
+	default y if SND_SOC_MAX98506=y
+	default m if SND_SOC_MAX98506=m
+	help
+	MAXIM DSM Log Driver
+
+config SND_SOC_MAXIM_DSM_CAL
+	tristate "Support MAXIM DSM Calibration"
+	default y if SND_SOC_MAX98505A=y
+	default m if SND_SOC_MAX98505A=m
+	default y if SND_SOC_MAX98505=y
+	default m if SND_SOC_MAX98505=m
+	default y if SND_SOC_MAX98506=y
+	default m if SND_SOC_MAX98506=m
+	help
+	MAXIM Calibration Driver
+
+config SND_SOC_MAX98505
+	tristate "Support MAX98505"
+	depends on I2C
+	help
+	MAX98505 driver
+
+config SND_SOC_MAX98505A
+	tristate "Support MAX98505A"
+	depends on I2C
+	help
+	MAX98505A driver
+
+config SND_SOC_MAX98506
+	tristate "Support MAX98506"
+	depends on I2C
+	help
+	MAX98506 driver
 
 config SND_SOC_MAX9850
 	tristate
@@ -827,6 +881,9 @@ config SND_SOC_WM9712
 config SND_SOC_WM9713
 	tristate
 
+config SND_SOC_DUMMY_CODEC
+	tristate
+
 # Amp
 config SND_SOC_LM4857
 	tristate
@@ -846,5 +903,4 @@ config SND_SOC_ML26124
 config SND_SOC_TPA6130A2
 	tristate "Texas Instruments TPA6130A2 headphone amplifier"
 	depends on I2C
-
 endmenu

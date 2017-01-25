@@ -76,7 +76,7 @@ static const struct wm_adsp_region wm5102_dsp1_regions[] = {
 	{ .type = WMFW_ADSP2_YM, .base = 0x1a8000 },
 };
 
-static const struct reg_sequence wm5102_sysclk_reva_patch[] = {
+static const struct reg_default wm5102_sysclk_reva_patch[] = {
 	{ 0x3000, 0x2225 },
 	{ 0x3001, 0x3a03 },
 	{ 0x3002, 0x0225 },
@@ -595,14 +595,14 @@ static const struct reg_sequence wm5102_sysclk_reva_patch[] = {
 	{ 0x025e, 0x0112 },
 };
 
-static const struct reg_sequence wm5102_sysclk_revb_patch[] = {
+static const struct reg_default wm5102_sysclk_revb_patch[] = {
 	{ 0x3081, 0x08FE },
 	{ 0x3083, 0x00ED },
 	{ 0x30C1, 0x08FE },
 	{ 0x30C3, 0x00ED },
 };
 
-static const struct reg_sequence wm5102t_sysclk_pwr[] = {
+static const struct reg_default wm5102t_sysclk_pwr[] = {
 	{ 0x3125, 0x0A03 },
 	{ 0x3127, 0x0A03 },
 	{ 0x3129, 0x0A03 },
@@ -614,7 +614,7 @@ static int wm5102_sysclk_ev(struct snd_soc_dapm_widget *w,
 	struct snd_soc_codec *codec = w->codec;
 	struct arizona *arizona = dev_get_drvdata(codec->dev->parent);
 	struct regmap *regmap = arizona->regmap;
-	const struct reg_sequence *patch = NULL;
+	const struct reg_default *patch = NULL;
 	int patch_size;
 
 	switch (arizona->rev) {
@@ -881,10 +881,10 @@ ARIZONA_MIXER_CONTROLS("LHPF2", ARIZONA_HPLP2MIX_INPUT_1_SOURCE),
 ARIZONA_MIXER_CONTROLS("LHPF3", ARIZONA_HPLP3MIX_INPUT_1_SOURCE),
 ARIZONA_MIXER_CONTROLS("LHPF4", ARIZONA_HPLP4MIX_INPUT_1_SOURCE),
 
-ARIZONA_LHPF_CONTROL("LHPF1 Coefficients", ARIZONA_HPLPF1_2),
-ARIZONA_LHPF_CONTROL("LHPF2 Coefficients", ARIZONA_HPLPF2_2),
-ARIZONA_LHPF_CONTROL("LHPF3 Coefficients", ARIZONA_HPLPF3_2),
-ARIZONA_LHPF_CONTROL("LHPF4 Coefficients", ARIZONA_HPLPF4_2),
+SND_SOC_BYTES("LHPF1 Coefficients", ARIZONA_HPLPF1_2, 1),
+SND_SOC_BYTES("LHPF2 Coefficients", ARIZONA_HPLPF2_2, 1),
+SND_SOC_BYTES("LHPF3 Coefficients", ARIZONA_HPLPF3_2, 1),
+SND_SOC_BYTES("LHPF4 Coefficients", ARIZONA_HPLPF4_2, 1),
 
 ARIZONA_MIXER_CONTROLS("DSP1L", ARIZONA_DSP1LMIX_INPUT_1_SOURCE),
 ARIZONA_MIXER_CONTROLS("DSP1R", ARIZONA_DSP1RMIX_INPUT_1_SOURCE),
@@ -1149,7 +1149,7 @@ SND_SOC_DAPM_REGULATOR_SUPPLY("SPKVDDR", 0, 0),
 
 SND_SOC_DAPM_SIGGEN("TONE"),
 SND_SOC_DAPM_SIGGEN("NOISE"),
-SND_SOC_DAPM_MIC("HAPTICS", NULL),
+SND_SOC_DAPM_SIGGEN("HAPTICS"),
 
 SND_SOC_DAPM_INPUT("IN1L"),
 SND_SOC_DAPM_INPUT("IN1R"),

@@ -59,3 +59,8 @@ obj-$(CONFIG_VEXPRESS_SYSCFG)	+= vexpress-syscfg.o
 obj-$(CONFIG_CXL_BASE)		+= cxl/
 obj-$(CONFIG_UID_CPUTIME) += uid_cputime.o
 obj-$(CONFIG_MEMORY_STATE_TIME) += memory_state_time.o
+obj-$(CONFIG_MCU_IPC)		+= mcu_ipc/
+obj-$(CONFIG_SEC_SIPC_MODEM_IF)	+= modem_v1/
+
+# Secure OS Mobicore Interface
+obj-$(CONFIG_TRUSTONIC_TEE)	+= tzic64.o

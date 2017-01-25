@@ -104,7 +104,11 @@ fw-shipped-$(CONFIG_USB_EMI62) += emi62/loader.fw emi62/bitstream.fw \
 fw-shipped-$(CONFIG_USB_KAWETH) += kaweth/new_code.bin kaweth/trigger_code.bin \
 				   kaweth/new_code_fix.bin \
 				   kaweth/trigger_code_fix.bin
+# Wireless charger
+fw-shipped-$(CONFIG_WIRELESS_FIRMWARE_UPDATE) += idt/p9220_otp.bin idt/p9220_sram.bin
+
 ifdef CONFIG_FIRMWARE_IN_KERNEL
+fw-shipped-$(CONFIG_EXYNOS8890_APM) += apm_8890_evt1.fw
 fw-shipped-$(CONFIG_USB_SERIAL_KEYSPAN_MPR) += keyspan/mpr.fw
 fw-shipped-$(CONFIG_USB_SERIAL_KEYSPAN_USA18X) += keyspan/usa18x.fw
 fw-shipped-$(CONFIG_USB_SERIAL_KEYSPAN_USA19) += keyspan/usa19.fw
@@ -136,6 +140,15 @@ fw-shipped-$(CONFIG_USB_VICAM) += vicam/firmware.fw
 fw-shipped-$(CONFIG_VIDEO_CPIA2) += cpia2/stv0672_vp4.bin
 fw-shipped-$(CONFIG_YAM) += yam/1200.bin yam/9600.bin
 
+TSPFIRMWARE_DIRECTORY = firmware/tsp_stm
+fw-shipped-$(CONFIG_TOUCHSCREEN_FTS7) += tsp_stm/hero2i.fw tsp_stm/hero2a.fw tsp_stm/hero_e.fw
+
+TSPFIRMWARE_DIRECTORY = firmware/tsp_sec
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/hero.bin
+fw-shipped-$(CONFIG_TOUCHSCREEN_SEC_TS) += tsp_sec/hero_ub.bin tsp_sec/hero2la.bin
+
+fw-shipped-$(CONFIG_KEYBOARD_CYPRESS_TOUCH_MBR31X5) += cypress/cy8cmbr3145_hero.fw
+fw-shipped-$(CONFIG_KEYBOARD_ABOV_FT16XX_TOUCH) += abov/abov_hero.fw abov/abov_hero2.fw
 fw-shipped-all := $(fw-shipped-y) $(fw-shipped-m) $(fw-shipped-)
 
 quiet_cmd_ihex  = IHEX    $@
