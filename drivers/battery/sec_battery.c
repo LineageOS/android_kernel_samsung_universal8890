@@ -1491,6 +1491,9 @@ static void sec_bat_swelling_check(struct sec_battery_info *battery, int tempera
 	psy_do_property(battery->pdata->charger_name, get,
 			POWER_SUPPLY_PROP_VOLTAGE_MAX, val);
 
+	/* convert back */
+	val.intval /= 100;
+
 	pr_info("%s: status(%d), swell_mode(%d:%d), cv(0x%02x), temp(%d)\n",
 		__func__, battery->status, battery->swelling_mode,
 		battery->charging_block, val.intval, temperature);
@@ -1781,6 +1784,8 @@ static bool sec_bat_temperature_check(
 
 			psy_do_property(battery->pdata->charger_name, get,
 					POWER_SUPPLY_PROP_VOLTAGE_MAX, value);
+			/* convert back */
+			value.intval /= 1000;
 			if (value.intval <= battery->pdata->swelling_normal_float_voltage) {
 				value.intval = battery->pdata->swelling_normal_float_voltage;
 				psy_do_property(battery->pdata->charger_name, set,
@@ -2878,6 +2883,8 @@ static void sec_bat_get_battery_info(
 	/* input current limit in charger */
 	psy_do_property(battery->pdata->charger_name, get,
 		POWER_SUPPLY_PROP_CURRENT_MAX, value);
+	/* convert back */
+	value.intval /= 1000;
 	battery->current_max = value.intval;
 
 	/* check abnormal status for wireless charging */
@@ -3215,6 +3222,8 @@ static void sec_bat_time_to_full_work(struct work_struct *work)
 
 	psy_do_property(battery->pdata->charger_name, get,
 		POWER_SUPPLY_PROP_CURRENT_MAX, value);
+	/* convert back */
+	value.intval /= 1000;
 	battery->current_max = value.intval;
 
 	value.intval = SEC_BATTERY_CURRENT_MA;
@@ -3658,6 +3667,8 @@ static void sec_bat_monitor_work(
 		battery->cable_type == POWER_SUPPLY_TYPE_WIRELESS_HV_STAND)) {
 		psy_do_property(battery->pdata->wireless_charger_name, get,
 				POWER_SUPPLY_PROP_VOLTAGE_MAX, value);
+		/* convert back */
+		value.intval /= 1000;
 		pr_info("%s: soc(%d), cable(%d), vout(%d)\n",
 			__func__, battery->capacity, battery->cable_type, value.intval);
 		if (value.intval < P9220_VOUT_9V_VAL) {
@@ -4062,6 +4073,8 @@ static void sec_bat_afc_work(struct work_struct *work)
 
 	psy_do_property(battery->pdata->charger_name, get,
 		POWER_SUPPLY_PROP_CURRENT_MAX, value);
+	/* convert back */
+	value.intval /= 1000;
 	battery->current_max = value.intval;
 
 	if (battery->current_event & SEC_BAT_CURRENT_EVENT_AFC &&
@@ -4082,6 +4095,8 @@ static void sec_bat_wc_afc_work(struct work_struct *work)
 	pr_info("%s\n", __func__);
 	psy_do_property(battery->pdata->charger_name, get,
 			POWER_SUPPLY_PROP_CURRENT_MAX, value);
+		/* convert back */
+		value.intval /= 1000;
 		battery->current_max = value.intval;
 
 	if (battery->current_event & SEC_BAT_CURRENT_EVENT_AFC &&

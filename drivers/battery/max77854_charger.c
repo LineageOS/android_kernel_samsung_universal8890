@@ -893,7 +893,8 @@ static int max77854_chg_get_property(struct power_supply *psy,
 		max77854_test_read(charger);
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_MAX:
-		val->intval = charger->input_current;
+		/* convert to uA */
+		val->intval = charger->input_current * 1000;
 		break;
 	case POWER_SUPPLY_PROP_CURRENT_AVG:
 		if (val->intval == POWER_SUPPLY_TYPE_WIRELESS ||
@@ -915,7 +916,8 @@ static int max77854_chg_get_property(struct power_supply *psy,
 		val->intval = max77854_get_charge_current(charger);
 		break;
 	case POWER_SUPPLY_PROP_VOLTAGE_MAX:
-		val->intval = max77854_get_float_voltage(charger);
+		/* convert to uV */
+		val->intval = max77854_get_float_voltage(charger) * 100;
 		break;
 #if defined(CONFIG_AFC_CHARGER_MODE)
 	case POWER_SUPPLY_PROP_AFC_CHARGER_MODE:
