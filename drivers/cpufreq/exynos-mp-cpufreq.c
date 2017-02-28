@@ -1713,7 +1713,13 @@ static int exynos_cluster0_min_qos_handler(struct notifier_block *b, unsigned lo
 	int cpu = boot_cluster ? NR_CLUST1_CPUS : 0;
 	unsigned int threshold_freq;
 
+#if defined(CONFIG_CPU_FREQ_GOV_INTERACTIVE)
+	threshold_freq = cpufreq_interactive_get_hispeed_freq(0);
+	if (!threshold_freq)
+		threshold_freq = 1000000;	/* 1.0GHz */
+#else
 	threshold_freq = 1000000;	/* 1.0GHz */
+#endif
 
 	freq = exynos_getspeed(cpu);
 	if (freq >= val)
