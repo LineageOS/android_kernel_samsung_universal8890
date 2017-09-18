@@ -22,6 +22,29 @@
       "revId": "60de707a7ea474fed71b7c237d7eadb5a6761a82",
       "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
       "unresolved": false
+    },
+    {
+      "key": {
+        "uuid": "b621c18f_2df02f1d",
+        "filename": "/COMMIT_MSG",
+        "patchSetId": 1
+      },
+      "lineNbr": 7,
+      "author": {
+        "id": 3423
+      },
+      "writtenOn": "2017-09-18T20:09:15Z",
+      "side": 1,
+      "message": "Fixed in Patch Set 2",
+      "range": {
+        "startLine": 7,
+        "startChar": 14,
+        "endLine": 7,
+        "endChar": 15
+      },
+      "revId": "60de707a7ea474fed71b7c237d7eadb5a6761a82",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71",
+      "unresolved": false
     }
   ]
 }
