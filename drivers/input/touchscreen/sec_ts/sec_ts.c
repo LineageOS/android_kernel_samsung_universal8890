@@ -138,7 +138,6 @@ static ssize_t sec_ts_gesture_status_show(struct device *dev,
 static inline ssize_t sec_ts_show_error(struct device *dev,
 	struct device_attribute *attr, char *buf);
 
-
 static DEVICE_ATTR(sec_ts_reg, 0660, NULL, sec_ts_reg_store);
 static DEVICE_ATTR(sec_ts_regreadsize, 0660, NULL, sec_ts_regreadsize_store);
 static DEVICE_ATTR(sec_ts_enter_recovery, 0660, NULL, sec_ts_enter_recovery_store);
@@ -544,6 +543,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 	int t_id;
 	int event_id;
 	int read_event_count;
+	unsigned int keycode;
 	u8 read_event_buff[SEC_TS_Event_Buff_Size];
 	struct sec_ts_event_coordinate * p_event_coord;
 	struct sec_ts_event_status * p_event_status;
@@ -897,9 +897,10 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 					else if (p_gesture_status->gesture== SEC_TS_GESTURE_CODE_AOD)
 						ts->scrub_id = 0x08;
 
-					input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 1);
+					keycode = ts->dt2w_enable ? KEY_POWER : KEY_BLACK_UI_GESTURE;
+					input_report_key(ts->input_dev, keycode, 1);
 					input_sync(ts->input_dev);
-					input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 0);
+					input_report_key(ts->input_dev, keycode, 0);
 				}
 			}
 			input_info(true, &ts->client->dev, "%s: GESTURE  %x %x %x %x %x %x\n", __func__,
@@ -1961,6 +1962,7 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	set_bit(BTN_TOUCH, ts->input_dev->keybit);
 	set_bit(BTN_TOOL_FINGER, ts->input_dev->keybit);
 	set_bit(KEY_BLACK_UI_GESTURE, ts->input_dev->keybit);
+	set_bit(KEY_POWER, ts->input_dev->keybit);
 
 #ifdef SEC_TS_SUPPORT_TOUCH_KEY
 	if (ts->plat_data->support_mskey) {
@@ -2139,9 +2141,31 @@ static int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode)
 	int ret = -1,retrycnt = 0;
 	u8 lowpower_data;
 	char para = 0;
+   	u8 area_cmd[10] = {0};
 
 	input_err(true, &ts->client->dev, "%s: %s\n", __func__,
 			mode == TO_LOWPOWER_MODE ? "ENTER" : "EXIT");
+
+	if (ts->dt2w_enable) {
+		area_cmd[0] = ts->plat_data->max_x & 0xff;
+		area_cmd[1] = (ts->plat_data->max_x >> 8) & 0xff;
+		area_cmd[2] = ts->plat_data->max_y & 0xff;
+		area_cmd[3] = (ts->plat_data->max_y >> 8) & 0xff;
+		/* x and y are zero, so no need to explicitly set */
+		disable_irq(ts->client->irq);
+		ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SPONGE_WRITE_PARAM, &area_cmd[0], 10);
+		if (ret < 0) {
+			input_err(true, &ts->client->dev, "%s: Failed to write mode\n", __func__);
+			goto out;
+		}		
+
+		enable_irq(ts->client->irq);
+	}
+
+out:
+	mutex_lock(&ts->lock);
+	ts->cmd_is_running = false;
+	mutex_unlock(&ts->lock);
 
 	disable_irq(ts->client->irq);
 
