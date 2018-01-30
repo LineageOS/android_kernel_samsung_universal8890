@@ -354,6 +354,54 @@ static ssize_t read_module_id_show(struct device *dev,
 	return snprintf(buf, SEC_CMD_BUF_SIZE, "%s", buff);
 }
 
+static ssize_t sec_ts_dt2w_enable_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+
+	return snprintf(buf, PAGE_SIZE, "%d\n", ts->dt2w_enable);
+}
+
+static ssize_t sec_ts_dt2w_enable_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	struct sec_ts_data *ts = dev_get_drvdata(dev);
+	bool enable;
+
+	if (count < 1)
+		return -EINVAL;
+
+	enable = buf[0] == '1';
+
+	if (!ts->enabled) {
+		return -EINVAL;
+	}
+
+	if (enable == ts->dt2w_enable)
+		return 0;
+
+	mutex_lock(&ts->lock);
+	ts->cmd_is_running = true;
+	mutex_unlock(&ts->lock);
+
+	if (enable) {
+		ts->lowpower_mode = true;
+		ts->lowpower_flag |= SEC_TS_LOWP_FLAG_AOD;
+		ts->dt2w_enable = true;
+	} else {
+		ts->lowpower_flag &= ~SEC_TS_LOWP_FLAG_AOD;
+		if (!ts->lowpower_flag)
+			ts->lowpower_mode = false;
+		ts->dt2w_enable = false;
+	}
+
+	mutex_lock(&ts->lock);
+	ts->cmd_is_running = false;
+	mutex_unlock(&ts->lock);
+	return 0;
+}
+
+static DEVICE_ATTR(dt2w_enable, 0660, sec_ts_dt2w_enable_show, sec_ts_dt2w_enable_store);
 static DEVICE_ATTR(ito_check, S_IRUGO, read_ito_check_show, NULL);
 static DEVICE_ATTR(raw_check, S_IRUGO, read_raw_check_show, NULL);
 static DEVICE_ATTR(multi_count, S_IRUGO, read_multi_count_show, NULL);
@@ -371,6 +419,7 @@ static struct attribute *cmd_attributes[] = {
 	&dev_attr_scrub_pos.attr,
 	&dev_attr_edge_pos.attr,
 #ifdef USE_HW_PARAMETER
+	&dev_attr_dt2w_enable.attr,
 	&dev_attr_ito_check.attr,
 	&dev_attr_raw_check.attr,
 	&dev_attr_multi_count.attr,
