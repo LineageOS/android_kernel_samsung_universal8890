@@ -544,6 +544,7 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 	int t_id;
 	int event_id;
 	int read_event_count;
+	unsigned int keycode;
 	u8 read_event_buff[SEC_TS_Event_Buff_Size];
 	struct sec_ts_event_coordinate * p_event_coord;
 	struct sec_ts_event_status * p_event_status;
@@ -891,15 +892,17 @@ static void sec_ts_read_event(struct sec_ts_data *ts)
 								p_gesture_status->gesture== SEC_TS_GESTURE_CODE_AOD ? "AOD" :
 								p_gesture_status->gesture == SEC_TS_GESTURE_CODE_SPAY ? "SPAY" : "OTHER");
 
+					keycode = ts->dt2w_enable ? KEY_POWER : KEY_BLACK_UI_GESTURE;
+
 					/* will be fixed after merge String Liabrary : SPAY or Double Tab */
 					if (p_gesture_status->gesture == SEC_TS_GESTURE_CODE_SPAY)
 						ts->scrub_id = 0x04;
 					else if (p_gesture_status->gesture== SEC_TS_GESTURE_CODE_AOD)
 						ts->scrub_id = 0x08;
 
-					input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 1);
+					input_report_key(ts->input_dev, keycode, 1);
 					input_sync(ts->input_dev);
-					input_report_key(ts->input_dev, KEY_BLACK_UI_GESTURE, 0);
+					input_report_key(ts->input_dev, keycode, 0);
 				}
 			}
 			input_info(true, &ts->client->dev, "%s: GESTURE  %x %x %x %x %x %x\n", __func__,
@@ -1961,6 +1964,7 @@ static int sec_ts_probe(struct i2c_client *client, const struct i2c_device_id *i
 	set_bit(BTN_TOUCH, ts->input_dev->keybit);
 	set_bit(BTN_TOOL_FINGER, ts->input_dev->keybit);
 	set_bit(KEY_BLACK_UI_GESTURE, ts->input_dev->keybit);
+	set_bit(KEY_POWER, ts->input_dev->keybit);
 
 #ifdef SEC_TS_SUPPORT_TOUCH_KEY
 	if (ts->plat_data->support_mskey) {
@@ -2178,6 +2182,20 @@ static int sec_ts_set_lowpowermode(struct sec_ts_data *ts, u8 mode)
 			ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SPONGE_NOTIFY_PACKET, NULL, 0);
 			if (ret < 0)
 				input_err(true, &ts->client->dev, "%s: Failed to send notify\n", __func__);
+		}
+
+		if (ts->dt2w_enable) {
+		    u8 area_cmd[10] = {0x02, 0};
+
+			area_cmd[2] = ts->plat_data->max_x & 0xff;
+			area_cmd[3] = (ts->plat_data->max_x >> 8) & 0xff;
+			area_cmd[4] = ts->plat_data->max_y & 0xff;
+			area_cmd[5] = (ts->plat_data->max_y >> 8) & 0xff;
+			/* x and y are zero, so no need to explicitly set */
+
+			ret = ts->sec_ts_i2c_write(ts, SEC_TS_CMD_SPONGE_WRITE_PARAM, &area_cmd[0], 10);
+			if (ret < 0)
+				input_err(true, &ts->client->dev, "%s: Failed to write offset\n", __func__);
 		}
 
 		input_info(true, &ts->client->dev, "%s set lowpower flag:%d lowpower_data:%d\n", __func__,
