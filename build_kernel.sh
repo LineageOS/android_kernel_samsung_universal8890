@@ -1,7 +1,7 @@
 #!/bin/bash
 # Kernel Build Script
 
-MODEL=hero2lte
+MODEL=herolte
 VARIANT=xx
 ARCH=arm64
 
@@ -11,14 +11,14 @@ BUILD_ROOT_DIR=$BUILD_KERNEL_DIR/..
 BUILD_KERNEL_OUT_DIR=$BUILD_ROOT_DIR/kernel_out/JESSE_KERNEL_OBJ
 PRODUCT_OUT=$BUILD_ROOT_DIR/kernel_out
 
-BUILD_CROSS_COMPILE=$ANDROID_GCC_TOOLCHAIN
+BUILD_CROSS_COMPILE=/home/wirus/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 BUILD_JOB_NUMBER=`grep processor /proc/cpuinfo|wc -l`
 
 # Default Python version is 2.7
 mkdir -p bin
 ln -sf /usr/bin/python2.7 ./bin/python
 export PATH=$(pwd)/bin:$PATH
-KERNEL_DEFCONFIG=exynos8890-hero2lte_defconfig
+KERNEL_DEFCONFIG=exynos8890-herolte_defconfig
 
 KERNEL_IMG=$BUILD_KERNEL_OUT_DIR/arch/arm64/boot/Image
 DTC=$BUILD_KERNEL_OUT_DIR/scripts/dtc/dtc
