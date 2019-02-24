@@ -11,14 +11,26 @@ BUILD_ROOT_DIR=$BUILD_KERNEL_DIR/..
 BUILD_KERNEL_OUT_DIR=$BUILD_ROOT_DIR/kernel_out/JESSE_KERNEL_OBJ
 PRODUCT_OUT=$BUILD_ROOT_DIR/kernel_out
 
-BUILD_CROSS_COMPILE=/home/wirusx/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+BUILD_CROSS_COMPILE=/home/svirusx/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 BUILD_JOB_NUMBER=`grep processor /proc/cpuinfo|wc -l`
 
 # Default Python version is 2.7
 mkdir -p bin
 ln -sf /usr/bin/python2.7 ./bin/python
 export PATH=$(pwd)/bin:$PATH
-KERNEL_DEFCONFIG=exynos8890-herolte_defconfig
+
+DEFCONFIG="arch/arm64/configs/build_defconfig"
+rm -f $DEFCONFIG
+cp -f arch/arm64/configs/nethunter_defconfig $DEFCONFIG
+case $MODEL in
+herolte)
+cat arch/arm64/configs/herolte_defconfig >> $DEFCONFIG
+;;
+hero2lte)
+cat arch/arm64/configs/hero2lte_defconfig >> $DEFCONFIG
+;;
+esac
+KERNEL_DEFCONFIG=build_defconfig
 
 KERNEL_IMG=$BUILD_KERNEL_OUT_DIR/arch/arm64/boot/Image
 DTC=$BUILD_KERNEL_OUT_DIR/scripts/dtc/dtc
@@ -156,3 +168,5 @@ rm -rf ./build.log
 if [ ! -f "$KERNEL_IMG" ]; then
   exit 1
 fi
+
+rm -f $DEFCONFIG
