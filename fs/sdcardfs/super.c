@@ -220,6 +220,9 @@ static struct inode *sdcardfs_alloc_inode(struct super_block *sb)
 
 	i->data = d;
 	kref_init(&d->refcount);
+	i->top_data = d;
+	spin_lock_init(&i->top_lock);
+	kref_get(&d->refcount);
 
 	i->vfs_inode.i_version = 1;
 	return &i->vfs_inode;
@@ -317,6 +320,8 @@ static int sdcardfs_show_options(struct vfsmount *mnt, struct seq_file *m,
 		seq_printf(m, ",unshared_obb");
 	if (opts->nocache)
 		seq_printf(m, ",nocache");
+	if (opts->unshared_obb)
+		seq_printf(m, ",unshared_obb");
 
 	return 0;
 };
