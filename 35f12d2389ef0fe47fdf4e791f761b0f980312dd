@@ -1,0 +1,21 @@
+{
+  "comments": [
+    {
+      "unresolved": false,
+      "key": {
+        "uuid": "291c87d7_3a65ae59",
+        "filename": "/PATCHSET_LEVEL",
+        "patchSetId": 1
+      },
+      "lineNbr": 0,
+      "author": {
+        "id": 17401
+      },
+      "writtenOn": "2022-04-06T02:08:36Z",
+      "side": 1,
+      "message": "fixes kernel building after https://review.lineageos.org/c/LineageOS/android_vendor_lineage/+/326186",
+      "revId": "35f12d2389ef0fe47fdf4e791f761b0f980312dd",
+      "serverId": "1ec6b3db-b2c1-4fa4-84a2-4c7efe89ba71"
+    }
+  ]
+}
